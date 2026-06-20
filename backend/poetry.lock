@@ -1678,18 +1678,6 @@ files = [
 ]
 
 [[package]]
-name = "genlayer-py"
-version = "0.0.1"
-description = "A minimal empty PyPI package for genlayer-py"
-optional = false
-python-versions = ">=3.6"
-groups = ["main"]
-files = [
-    {file = "genlayer_py-0.0.1-py3-none-any.whl", hash = "sha256:c1d7d86d271853dec9da5233e92f0007c985cdabd818ff014ce9186158c751f7"},
-    {file = "genlayer_py-0.0.1.tar.gz", hash = "sha256:3125849103671288f1c112b30edbd20c312bd58d9542655daf7f323b49759132"},
-]
-
-[[package]]
 name = "greenlet"
 version = "3.5.2"
 description = "Lightweight in-process concurrent programming"
@@ -4898,4 +4886,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "c9279c05e4acf9f9027ce14b500d4921407fd29622d0ba556de2f5f96f5bd13a"
+content-hash = "3f4131caaa4c944c8bc2e9ac9b1e6da51c52d5840d3e49f604f1ed491842bbf3"

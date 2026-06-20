@@ -13,9 +13,8 @@ RUN pip install poetry==1.8.3
 COPY pyproject.toml poetry.lock* ./
 
 RUN poetry config virtualenvs.create false && \
-    poetry lock && \
-    poetry install --no-interaction --no-ansi --no-root && \
-    pip install "genlayer-py>=0.8.1" --upgrade
+    poetry install --no-interaction --no-ansi --no-root
+RUN pip install "genlayer-py>=0.8.1"
 
 COPY . .
 
