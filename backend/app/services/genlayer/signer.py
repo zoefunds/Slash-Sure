@@ -1,5 +1,7 @@
 """Helpers to retrieve a user's wallet private key for signing GenLayer transactions."""
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +13,7 @@ async def get_user_private_key(user_id: str, db: AsyncSession) -> str | None:
     """Return the user's plaintext private key decrypted with the master key.
     Returns None if no master-encrypted copy exists (pre-migration wallets).
     """
-    result = await db.execute(select(Wallet).where(Wallet.user_id == user_id))
+    result = await db.execute(select(Wallet).where(Wallet.user_id == uuid.UUID(user_id)))
     wallet = result.scalar_one_or_none()
     if not wallet or not wallet.master_encrypted_private_key:
         return None
