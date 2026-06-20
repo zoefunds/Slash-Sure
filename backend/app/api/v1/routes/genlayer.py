@@ -16,7 +16,7 @@ from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/genlayer", tags=["GenLayer"])
 
-CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d"
+CONTRACT_ADDRESS = "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86"
 
 
 # ── Global Stats ──────────────────────────────────────────────────────────────

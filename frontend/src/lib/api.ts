@@ -124,7 +124,7 @@ export const riskApi = {
 };
 
 // GenLayer on-chain — all calls go to StudioNet which can be slow
-export const CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d";
+export const CONTRACT_ADDRESS = "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86";
 
 export const genlayerApi = {
   // 12s timeout — StudioNet can be slow; callers should handle rejection gracefully

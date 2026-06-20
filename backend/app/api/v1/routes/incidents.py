@@ -117,6 +117,7 @@ async def create_incident(
     await db.flush()
 
     # Create evidence records and build merkle root
+    incident_id_str = str(incident.id)
     evidence_strings = []
     for idx, item_str in enumerate(body.evidence_items):
         ev = IncidentEvidence(
@@ -129,13 +130,14 @@ async def create_incident(
         db.add(ev)
         evidence_strings.append(item_str)
 
-    merkle_root = compute_merkle_root(evidence_strings) if evidence_strings else ""
+    # Always include incident_id as a base evidence item so merkle_root is never empty
+    evidence_strings_for_merkle = evidence_strings if evidence_strings else [incident_id_str]
+    merkle_root = compute_merkle_root(evidence_strings_for_merkle)
     evidence_summary_hash = hashlib.sha256(
         "\n".join(evidence_strings).encode()
     ).hexdigest()
 
     # Submit evidence to GenLayer asynchronously
-    incident_id_str = str(incident.id)
     background_tasks.add_task(
         _submit_evidence_and_analyze,
         incident_id_str,
@@ -144,7 +146,7 @@ async def create_incident(
         body.network,
         body.block_number or 0,
         merkle_root,
-        len(evidence_strings),
+        max(1, len(evidence_strings)),
         evidence_summary_hash,
         "\n".join(evidence_strings),
         operator.uptime_percentage if operator else 100,

@@ -209,10 +209,10 @@ export default function SlashingPage() {
                     </span>
                   </td>
                   <td className="px-4 py-4 font-mono">
-                    {c.ai_fault_probability !== undefined ? `${c.ai_fault_probability}%` : "—"}
+                    {c.ai_fault_probability != null ? `${c.ai_fault_probability}%` : "—"}
                   </td>
                   <td className="px-4 py-4 font-mono text-red-700">
-                    {c.recommended_slash_amount !== undefined
+                    {c.recommended_slash_amount != null
                       ? `${formatNumber(c.recommended_slash_amount)} GEN`
                       : "—"}
                   </td>

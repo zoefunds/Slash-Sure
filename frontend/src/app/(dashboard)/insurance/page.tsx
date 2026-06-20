@@ -263,10 +263,10 @@ export default function InsurancePage() {
                       {c.status}
                     </span>
                   </td>
-                  <td className="px-4 py-4 font-mono">{formatNumber(c.coverage_amount)} GEN</td>
-                  <td className="px-4 py-4 font-mono">{formatNumber(c.claimed_amount)} GEN</td>
+                  <td className="px-4 py-4 font-mono">{c.coverage_amount != null ? `${formatNumber(c.coverage_amount)} GEN` : "—"}</td>
+                  <td className="px-4 py-4 font-mono">{c.claimed_amount != null ? `${formatNumber(c.claimed_amount)} GEN` : "—"}</td>
                   <td className="px-4 py-4 font-mono">
-                    {c.approved_amount !== undefined ? `${formatNumber(c.approved_amount)} GEN` : "—"}
+                    {c.approved_amount != null ? `${formatNumber(c.approved_amount)} GEN` : "—"}
                   </td>
                   <td className="px-4 py-4">
                     {c.ai_coverage_eligible === true ? (
@@ -278,7 +278,7 @@ export default function InsurancePage() {
                     )}
                   </td>
                   <td className="px-4 py-4 font-mono">
-                    {c.ai_confidence_score !== undefined ? `${c.ai_confidence_score}%` : "—"}
+                    {c.ai_confidence_score != null ? `${c.ai_confidence_score}%` : "—"}
                   </td>
                   <td className="px-4 py-4 text-xs text-muted-foreground whitespace-nowrap">
                     {formatDateTime(c.submitted_at)}

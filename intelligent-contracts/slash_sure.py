@@ -143,7 +143,7 @@ class SlashSureContract(gl.Contract):
         idx = str(int(self.audit_count))
         entry_hash = self._hash({"action": action, "actor": actor,
                                   "resource_id": resource_id,
-                                  "block": int(gl.block.number)})
+                                  "block": 0})
         self.audit_trail[idx] = entry_hash
         self.audit_count = u256(int(self.audit_count) + 1)
 
@@ -216,8 +216,8 @@ class SlashSureContract(gl.Contract):
             "slashing_risk_score": 0,
             "insurance_premium_score": 20,
             "predicted_slash_prob": 0,
-            "registered_at": int(gl.block.number),
-            "last_updated": int(gl.block.number),
+            "registered_at": 0,
+            "last_updated": 0,
             "is_whitelisted": False,
             "metadata_hash": metadata_hash,
         }
@@ -234,7 +234,7 @@ class SlashSureContract(gl.Contract):
         self._not_paused()
         op = self._get_operator(address)
         op["total_stake"] = new_stake
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
         self._audit("operator_stake_updated", gl.message.sender_address.as_hex, address)
         return True
@@ -247,7 +247,7 @@ class SlashSureContract(gl.Contract):
         assert status in valid, "Invalid status"
         op = self._get_operator(address)
         op["status"] = status
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
         self._audit("operator_status_updated", gl.message.sender_address.as_hex, address)
         return True
@@ -257,7 +257,7 @@ class SlashSureContract(gl.Contract):
         self._only_owner()
         op = self._get_operator(address)
         op["is_whitelisted"] = True
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
         self._audit("operator_whitelisted", gl.message.sender_address.as_hex, address)
         return True
@@ -323,7 +323,7 @@ class SlashSureContract(gl.Contract):
             "evidence_count": evidence_count,
             "evidence_summary_hash": evidence_summary_hash,
             "submitted_by": gl.message.sender_address.as_hex,
-            "timestamp": int(gl.block.number),
+            "timestamp": 0,
         }
         self.evidence_packages[incident_id] = json.dumps(pkg)
         self.total_incidents = u256(int(self.total_incidents) + 1)
@@ -443,7 +443,7 @@ Return ONLY valid JSON, no markdown fences:
             "confidence_score": cf,
             "recommended_action": act,
             "verdict_hash": self._hash({"incident_id": incident_id, "fp": fp, "sv": sv, "act": act}),
-            "analysis_block": int(gl.block.number),
+            "analysis_block": 0,
         }
         self.ai_verdicts[incident_id] = json.dumps(verdict)
         self._audit("fault_analyzed", "llm", incident_id)
@@ -490,7 +490,7 @@ Return ONLY valid JSON, no markdown fences:
             "stage": "ai_analysis",
             "on_chain_hash": "",
             "appeal_deadline_block": 0,
-            "created_block": int(gl.block.number),
+            "created_block": 0,
             "resolved_block": 0,
         }
         self._set_case(case)
@@ -591,12 +591,12 @@ Return ONLY valid JSON, no markdown fences:
         assert case["stage"] == "recommended", "Must be in recommended stage"
 
         case["stage"] = "approved"
-        case["appeal_deadline_block"] = int(gl.block.number) + int(self.appeal_window)
+        case["appeal_deadline_block"] = 0
         self._set_case(case)
 
         op = self._get_operator(case["operator_address"])
         op["status"] = "jailed"
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
 
         self._audit("slashing_approved", gl.message.sender_address.as_hex, case_id)
@@ -611,7 +611,7 @@ Return ONLY valid JSON, no markdown fences:
         assert case["stage"] in ["recommended", "ai_analysis"], "Cannot reject at this stage"
 
         case["stage"] = "rejected"
-        case["resolved_block"] = int(gl.block.number)
+        case["resolved_block"] = 0
         self._set_case(case)
         self._audit("slashing_rejected", gl.message.sender_address.as_hex, case_id)
         return json.dumps({"case_id": case_id, "stage": "rejected"})
@@ -622,11 +622,10 @@ Return ONLY valid JSON, no markdown fences:
         self._only_owner()
         case = self._get_case(case_id)
         assert case["stage"] == "approved", "Must be approved"
-        assert int(gl.block.number) >= case["appeal_deadline_block"], "Appeal window still open"
 
         case["executed_amount"] = actual_slash_amount
         case["stage"] = "executed"
-        case["resolved_block"] = int(gl.block.number)
+        case["resolved_block"] = 0
         self._set_case(case)
 
         op = self._get_operator(case["operator_address"])
@@ -635,7 +634,7 @@ Return ONLY valid JSON, no markdown fences:
         op["total_stake"] = max(0, op.get("total_stake", 0) - actual_slash_amount)
         penalty = 15 + op["slash_count"] * 5
         op["reputation_score"] = max(0, op.get("reputation_score", 100) - penalty)
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
 
         self._audit("slashing_executed", gl.message.sender_address.as_hex, case_id)
@@ -647,7 +646,7 @@ Return ONLY valid JSON, no markdown fences:
         self._not_paused()
         case = self._get_case(case_id)
         assert case["stage"] == "approved", "Can only appeal approved cases"
-        assert int(gl.block.number) <= case["appeal_deadline_block"], "Appeal window closed"
+        # appeal always open (no block-based timing on StudioNet)
 
         case["stage"] = "appealed"
         self._set_case(case)
@@ -723,10 +722,10 @@ Return ONLY valid JSON, no markdown fences:
             case["stage"] = "rejected"
             case["slash_bps"] = 0
             case["slash_amount"] = 0
-            case["resolved_block"] = int(gl.block.number)
+            case["resolved_block"] = 0
             op = self._get_operator(case["operator_address"])
             op["status"] = "active"
-            op["last_updated"] = int(gl.block.number)
+            op["last_updated"] = 0
             self._set_operator(op)
         elif outcome == "reduce":
             case["slash_bps"]    = revised
@@ -784,7 +783,7 @@ Return ONLY valid JSON, no markdown fences:
             "ai_confidence": 0,
             "adjudication_hash": "",
             "on_chain_hash": "",
-            "submitted_block": int(gl.block.number),
+            "submitted_block": 0,
             "adjudicated_block": 0,
         }
         self._set_claim(claim)
@@ -879,7 +878,7 @@ Return ONLY valid JSON, no markdown fences:
         claim["adjudication_hash"] = adj_hash
         claim["on_chain_hash"]     = status_hash
         claim["status"]            = status
-        claim["adjudicated_block"] = int(gl.block.number)
+        claim["adjudicated_block"] = 0
         self._set_claim(claim)
         self._audit("claim_adjudicated", "llm", claim_id)
 
@@ -906,7 +905,7 @@ Return ONLY valid JSON, no markdown fences:
 
         approval_hash = self._hash({"claim_id": claim_id, "payout_id": payout_id,
                                      "amount": amount, "recipient": recipient_address,
-                                     "block": int(gl.block.number)})
+                                     "block": 0})
         payout = {
             "payout_id": payout_id,
             "claim_id": claim_id,
@@ -915,7 +914,7 @@ Return ONLY valid JSON, no markdown fences:
             "token": "GEN",
             "status": "authorized",
             "approval_hash": approval_hash,
-            "initiated_block": int(gl.block.number),
+            "initiated_block": 0,
             "completed_block": 0,
         }
         self.payouts[payout_id] = json.dumps(payout)
@@ -934,7 +933,7 @@ Return ONLY valid JSON, no markdown fences:
         assert payout_id in self.payouts, "Payout not found"
         payout = json.loads(self.payouts[payout_id])
         payout["status"] = "completed"
-        payout["completed_block"] = int(gl.block.number)
+        payout["completed_block"] = 0
         self.payouts[payout_id] = json.dumps(payout)
         self._audit("payout_completed", gl.message.sender_address.as_hex, payout_id)
         return json.dumps({"payout_id": payout_id, "status": "completed", "tx_hash": tx_hash})
@@ -1064,7 +1063,7 @@ Return ONLY valid JSON, no markdown fences:
         op["slashing_risk_score"]     = sr
         op["insurance_premium_score"] = ins
         op["reputation_score"]        = ov
-        op["last_updated"]            = int(gl.block.number)
+        op["last_updated"]            = 0
         self._set_operator(op)
         self._audit("reputation_computed", "llm", operator_address)
 
@@ -1180,7 +1179,7 @@ Return ONLY valid JSON, no markdown fences:
         pred_hash = self._hash({"operator": operator_address, "fp": fp, "sp": sp, "rt": rt})
         prediction = {
             "operator_address": operator_address,
-            "prediction_block": int(gl.block.number),
+            "prediction_block": 0,
             "failure_probability": fp,
             "slash_probability": sp,
             "instability_score": ins,
@@ -1193,7 +1192,7 @@ Return ONLY valid JSON, no markdown fences:
         self.risk_predictions[operator_address] = json.dumps(prediction)
 
         op["predicted_slash_prob"] = sp
-        op["last_updated"] = int(gl.block.number)
+        op["last_updated"] = 0
         self._set_operator(op)
         self._audit("risk_predicted", "llm", operator_address)
 
@@ -1222,7 +1221,7 @@ Return ONLY valid JSON, no markdown fences:
         assert proposal_type in valid_types, "Invalid proposal type"
 
         raw_id = "{}:{}:{}:{}".format(
-            gl.message.sender_address.as_hex, target_id, proposal_type, int(gl.block.number)
+            gl.message.sender_address.as_hex, target_id, proposal_type, 0
         )
         proposal_id = hashlib.sha256(raw_id.encode()).hexdigest()[:32]
         assert proposal_id not in self.governance_proposals, "Proposal already exists"
@@ -1236,8 +1235,8 @@ Return ONLY valid JSON, no markdown fences:
             "votes_for": 0,
             "votes_against": 0,
             "status": "active",
-            "created_block": int(gl.block.number),
-            "deadline_block": int(gl.block.number) + voting_period_blocks,
+            "created_block": 0,
+            "deadline_block": 0,
         }
         self.governance_proposals[proposal_id] = json.dumps(proposal)
         self.proposal_voters[proposal_id] = ""
@@ -1252,7 +1251,7 @@ Return ONLY valid JSON, no markdown fences:
         assert proposal_id in self.governance_proposals, "Proposal not found"
         proposal = json.loads(self.governance_proposals[proposal_id])
         assert proposal["status"] == "active", "Proposal not active"
-        assert int(gl.block.number) <= proposal["deadline_block"], "Voting closed"
+        # no deadline enforcement without block number
 
         voter    = gl.message.sender_address.as_hex
         existing = ""
@@ -1281,7 +1280,7 @@ Return ONLY valid JSON, no markdown fences:
         assert proposal_id in self.governance_proposals, "Not found"
         proposal = json.loads(self.governance_proposals[proposal_id])
         assert proposal["status"] == "active", "Already finalized"
-        assert int(gl.block.number) > proposal["deadline_block"], "Voting still open"
+        # no deadline enforcement without block number
 
         total = proposal["votes_for"] + proposal["votes_against"]
         if total == 0:

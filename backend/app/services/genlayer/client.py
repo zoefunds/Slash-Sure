@@ -1,6 +1,6 @@
 """
 GenLayer client — all on-chain calls for SlashSure contract
-0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d (StudioNet)
+0x2e38E8601A78E55866DEC53133a0A8e13ba40E86 (StudioNet)
 
 Uses genlayer-py SDK (>=0.8.1) with the proper write_contract/read_contract
 flow through the Consensus Main Contract.
@@ -16,7 +16,7 @@ from loguru import logger
 
 from app.core.config import settings
 
-CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d"
+CONTRACT_ADDRESS = "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86"
 
 # Lazy-initialise the SDK client once on first use
 _sdk_client = None

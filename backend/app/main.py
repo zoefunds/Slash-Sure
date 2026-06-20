@@ -98,7 +98,7 @@ async def health():
         "version": settings.VERSION,
         "env": settings.APP_ENV,
         "redis": redis_ok,
-        "contract": "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d",
+        "contract": "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86",
     }
 
 
