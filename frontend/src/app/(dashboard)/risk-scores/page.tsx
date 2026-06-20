@@ -41,8 +41,14 @@ export default function RiskScoresPage() {
     retry: false,
   });
 
+  type EnrichedOp = {
+    id: string; name: string; address: string; network: string; status: string;
+    reliability: number | null; security: number | null; slashRisk: number | null;
+    overall: number | null; trend: string;
+  };
+
   // Merge operator info with risk scores
-  const enriched = operators.map((op: {
+  const enriched: EnrichedOp[] = operators.map((op: {
     id: string; name: string; address: string; network: string; status: string;
   }) => {
     const score = scoresData?.find((s) => s.address === op.address);
