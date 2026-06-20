@@ -63,12 +63,12 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-2xl p-8 text-center space-y-4">
-          <CheckCircle className="w-12 h-12 text-green-400 mx-auto" />
+          <CheckCircle className="w-12 h-12 text-green-700 mx-auto" />
           <h2 className="text-lg font-bold">Claim Submitted</h2>
           <p className="text-muted-foreground text-sm">
             Your claim has been submitted and is queued for AI adjudication on GenLayer.
           </p>
-          <button onClick={onClose} className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors">
+          <button onClick={onClose} className="px-6 py-2.5 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-85 transition-opacity">
             Done
           </button>
         </div>
@@ -87,7 +87,7 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -99,7 +99,7 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
               required
               value={form.incident_id}
               onChange={(e) => setForm((f) => ({ ...f, incident_id: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
             >
               <option value="">Select incident…</option>
               {incidents?.items?.map((inc: { id: string; title: string; network: string }) => (
@@ -118,7 +118,7 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
               value={form.claimant_address}
               onChange={(e) => setForm((f) => ({ ...f, claimant_address: e.target.value }))}
               placeholder="0x..."
-              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
             />
           </div>
 
@@ -132,7 +132,7 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
                 value={form.coverage_amount}
                 onChange={(e) => setForm((f) => ({ ...f, coverage_amount: e.target.value }))}
                 placeholder="e.g. 10000"
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
               />
             </div>
             <div>
@@ -144,7 +144,7 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
                 value={form.claimed_amount}
                 onChange={(e) => setForm((f) => ({ ...f, claimed_amount: e.target.value }))}
                 placeholder="e.g. 8500"
-                className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
               />
             </div>
           </div>
@@ -156,11 +156,11 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
               value={form.policy_id}
               onChange={(e) => setForm((f) => ({ ...f, policy_id: e.target.value }))}
               placeholder="POL-..."
-              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
             />
           </div>
 
-          <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 text-xs text-blue-400">
+          <div className="p-3 rounded-lg bg-secondary border border-border text-xs text-muted-foreground">
             Claims are adjudicated by the SlashSure AI on GenLayer StudioNet. The AI evaluates
             coverage eligibility, damage assessment, and payout recommendation.
           </div>
@@ -230,7 +230,7 @@ export default function InsurancePage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
           <FileText className="w-4 h-4 text-purple-400" />
           <h2 className="font-semibold">All Claims</h2>
@@ -238,7 +238,7 @@ export default function InsurancePage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-secondary/30">
+            <thead className="bg-secondary">
               <tr>
                 {["Claim #", "Status", "Coverage", "Claimed", "Approved", "AI Eligible", "Confidence", "Submitted"].map((h) => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">
@@ -256,7 +256,7 @@ export default function InsurancePage() {
                 coverage_amount: number; claimed_amount: number; approved_amount?: number;
                 ai_coverage_eligible?: boolean; ai_confidence_score?: number; submitted_at: string;
               }) => (
-                <tr key={c.id} className="hover:bg-secondary/20 transition-colors">
+                <tr key={c.id} className="hover:bg-secondary transition-colors">
                   <td className="px-4 py-4 font-mono text-purple-400">{c.claim_number}</td>
                   <td className="px-4 py-4">
                     <span className={cn("px-2 py-1 rounded text-xs font-medium", statusColor(c.status))}>
@@ -270,9 +270,9 @@ export default function InsurancePage() {
                   </td>
                   <td className="px-4 py-4">
                     {c.ai_coverage_eligible === true ? (
-                      <span className="text-green-400 text-xs">✓ Eligible</span>
+                      <span className="text-green-700 text-xs">✓ Eligible</span>
                     ) : c.ai_coverage_eligible === false ? (
-                      <span className="text-red-400 text-xs">✗ Ineligible</span>
+                      <span className="text-red-700 text-xs">✗ Ineligible</span>
                     ) : (
                       <span className="text-muted-foreground text-xs">Pending</span>
                     )}

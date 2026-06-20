@@ -56,10 +56,11 @@ export default function DashboardPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: contractStats } = useQuery({
+  const { data: contractStats, isError: contractError } = useQuery({
     queryKey: ["genlayer-contract-stats"],
     queryFn: () => genlayerApi.getContractStats().then((r) => r.data),
-    refetchInterval: 60_000,
+    refetchInterval: 120_000,
+    retry: 1,
   });
 
   const { data: recentData } = useQuery({
@@ -223,8 +224,13 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3 mb-4">
           <Shield className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-semibold text-sm">GenLayer Contract</h3>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200 font-medium">
-            StudioNet Live
+          <span className={cn(
+            "text-xs px-2 py-0.5 rounded-full font-medium border",
+            contractError
+              ? "bg-amber-100 text-amber-700 border-amber-200"
+              : "bg-green-100 text-green-700 border-green-200"
+          )}>
+            {contractError ? "StudioNet Unreachable" : "StudioNet Live"}
           </span>
           <a
             href={`https://studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
@@ -235,19 +241,25 @@ export default function DashboardPage() {
             {process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}
           </a>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Total Operators", value: contractStats?.total_operators ?? "—" },
-            { label: "Slashing Cases", value: contractStats?.total_cases ?? "—" },
-            { label: "Insurance Claims", value: contractStats?.total_claims ?? "—" },
-            { label: "Audit Entries", value: contractStats?.audit_count ?? "—" },
-          ].map((item) => (
-            <div key={item.label} className="text-center p-3 rounded-xl bg-background border border-border">
-              <div className="text-xl font-bold tracking-tight">{item.value}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{item.label}</div>
-            </div>
-          ))}
-        </div>
+        {contractError ? (
+          <p className="text-xs text-muted-foreground py-2">
+            GenLayer StudioNet is not responding. On-chain stats will appear once the network is reachable.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Total Operators", value: contractStats?.total_operators ?? "—" },
+              { label: "Slashing Cases", value: contractStats?.total_cases ?? "—" },
+              { label: "Insurance Claims", value: contractStats?.total_claims ?? "—" },
+              { label: "Audit Entries", value: contractStats?.audit_count ?? "—" },
+            ].map((item) => (
+              <div key={item.label} className="text-center p-3 rounded-xl bg-background border border-border">
+                <div className="text-xl font-bold tracking-tight">{item.value}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{item.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

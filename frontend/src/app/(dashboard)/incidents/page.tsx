@@ -1,11 +1,147 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { incidentsApi } from "@/lib/api";
+
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { incidentsApi, operatorsApi } from "@/lib/api";
 import { cn, formatDateTime, severityColor, statusColor } from "@/lib/utils";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Plus, X, Loader2 } from "lucide-react";
+
+const NETWORKS = ["eigenlayer", "symbiotic", "babylon", "cosmos"];
+const SEVERITIES = ["low", "medium", "high", "critical"];
+
+function ReportIncidentModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    title: "", network: "eigenlayer", severity: "medium",
+    operator_address: "", description: "",
+  });
+  const [error, setError] = useState("");
+
+  const { data: operators } = useQuery({
+    queryKey: ["operators"],
+    queryFn: () => operatorsApi.list().then((r) => r.data),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => incidentsApi.create(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      onClose();
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setError(e?.response?.data?.detail || "Failed to report incident");
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    mutation.mutate({
+      title: form.title,
+      network: form.network,
+      severity: form.severity,
+      operator_address: form.operator_address || undefined,
+      description: form.description || undefined,
+    });
+  };
+
+  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold">Report Incident</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Incident Title *</label>
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Double-sign detected on EigenLayer"
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Network *</label>
+              <select
+                value={form.network}
+                onChange={(e) => setForm(f => ({ ...f, network: e.target.value }))}
+                className={inputCls}
+              >
+                {NETWORKS.map(n => <option key={n} value={n}>{n.charAt(0).toUpperCase() + n.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Severity *</label>
+              <select
+                value={form.severity}
+                onChange={(e) => setForm(f => ({ ...f, severity: e.target.value }))}
+                className={inputCls}
+              >
+                {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Operator (optional)</label>
+            <select
+              value={form.operator_address}
+              onChange={(e) => setForm(f => ({ ...f, operator_address: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">Select operator…</option>
+              {operators?.items?.map((op: { id: string; name: string; address: string }) => (
+                <option key={op.id} value={op.address}>{op.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Describe the violation in detail…"
+              rows={3}
+              className={inputCls + " resize-none"}
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={mutation.isPending}
+              className="flex-1 py-2.5 rounded-lg bg-foreground text-background disabled:opacity-50 text-sm font-semibold hover:opacity-85 transition-opacity flex items-center justify-center gap-2">
+              {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {mutation.isPending ? "Reporting…" : "Report Incident"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function IncidentsPage() {
+  const [showModal, setShowModal] = useState(false);
+
   const { data } = useQuery({
     queryKey: ["incidents"],
     queryFn: () => incidentsApi.list().then((r) => r.data),
@@ -14,63 +150,67 @@ export default function IncidentsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {showModal && <ReportIncidentModal onClose={() => setShowModal(false)} />}
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Incidents</h1>
-          <p className="text-muted-foreground mt-1">All detected protocol violations and security events</p>
+          <h1 className="text-xl font-bold">Incidents</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">All detected protocol violations and security events</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg text-sm font-medium hover:opacity-85 transition-opacity"
+        >
           <Plus className="w-4 h-4" /> Report Incident
         </button>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-          <AlertTriangle className="w-4 h-4 text-red-400" />
-          <h2 className="font-semibold">All Incidents</h2>
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+          <AlertTriangle className="w-4 h-4 text-red-600" />
+          <h2 className="font-semibold text-sm">All Incidents</h2>
           <span className="ml-auto text-xs text-muted-foreground">{data?.total ?? 0} total</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-secondary/30">
+            <thead className="bg-secondary">
               <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Title</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Network</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Severity</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Status</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">AI Score</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Detected</th>
+                {["Title", "Network", "Severity", "Status", "AI Score", "Detected"].map(h => (
+                  <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {data?.items?.map((i: { id: string; title: string; network: string; severity: string; status: string; ai_fault_probability?: number; ai_confidence_score?: number; detected_at: string }) => (
-                <tr key={i.id} className="hover:bg-secondary/20 transition-colors cursor-pointer">
-                  <td className="px-6 py-4 font-medium">{i.title}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{i.network}</td>
-                  <td className="px-6 py-4">
-                    <span className={cn("px-2 py-1 rounded text-xs font-medium border", severityColor(i.severity))}>
-                      {i.severity}
-                    </span>
+              {data?.items?.map((i: {
+                id: string; title: string; network: string; severity: string;
+                status: string; ai_fault_probability?: number; detected_at: string;
+              }) => (
+                <tr key={i.id} className="hover:bg-secondary/50 transition-colors cursor-pointer">
+                  <td className="px-5 py-3.5 font-medium">{i.title}</td>
+                  <td className="px-5 py-3.5 text-muted-foreground capitalize">{i.network}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={cn("px-2 py-0.5 rounded text-xs font-medium border", severityColor(i.severity))}>{i.severity}</span>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={cn("px-2 py-1 rounded text-xs font-medium", statusColor(i.status))}>
-                      {i.status}
-                    </span>
+                  <td className="px-5 py-3.5">
+                    <span className={cn("px-2 py-0.5 rounded text-xs font-medium", statusColor(i.status))}>{i.status}</span>
                   </td>
-                  <td className="px-6 py-4">
-                    {i.ai_fault_probability !== undefined ? (
-                      <span className="font-mono">{i.ai_fault_probability}%</span>
-                    ) : <span className="text-muted-foreground">Pending</span>}
+                  <td className="px-5 py-3.5">
+                    {i.ai_fault_probability !== undefined
+                      ? <span className="font-mono text-xs">{i.ai_fault_probability}%</span>
+                      : <span className="text-muted-foreground text-xs">Pending</span>}
                   </td>
-                  <td className="px-6 py-4 text-muted-foreground text-xs">
-                    {formatDateTime(i.detected_at)}
-                  </td>
+                  <td className="px-5 py-3.5 text-muted-foreground text-xs">{formatDateTime(i.detected_at)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {!data?.items?.length && (
-            <div className="px-6 py-16 text-center text-muted-foreground">No incidents recorded</div>
+            <div className="px-5 py-16 text-center text-muted-foreground text-sm">
+              No incidents recorded —{" "}
+              <button onClick={() => setShowModal(true)} className="underline hover:text-foreground transition-colors">
+                report one
+              </button>
+            </div>
           )}
         </div>
       </div>

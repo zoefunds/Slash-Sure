@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Settings, Wallet, Bell, Shield, Key, Copy, Check } from "lucide-react";
+import { Settings, Wallet, Bell, Key, Copy, Check, Save } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { truncateAddress } from "@/lib/utils";
+import { cn, truncateAddress } from "@/lib/utils";
 import { authApi } from "@/lib/api";
 
 export default function SettingsPage() {
@@ -12,6 +12,13 @@ export default function SettingsPage() {
   const [exportError, setExportError] = useState("");
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [notifs, setNotifs] = useState({
+    critical_slashing: true,
+    claim_updates: true,
+    operator_status: true,
+    weekly_digest: false,
+  });
+  const [savedNotifs, setSavedNotifs] = useState(false);
 
   const handleExportKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,9 +48,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Account */}
-      <div className="rounded-2xl border border-border bg-card/50 p-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Settings className="w-5 h-5 text-blue-400" />
+          <Settings className="w-5 h-5 text-muted-foreground" />
           <h2 className="font-semibold">Account Information</h2>
         </div>
         <div className="space-y-4">
@@ -59,21 +66,21 @@ export default function SettingsPage() {
       </div>
 
       {/* Wallet */}
-      <div className="rounded-2xl border border-border bg-card/50 p-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Wallet className="w-5 h-5 text-purple-400" />
+          <Wallet className="w-5 h-5 text-muted-foreground" />
           <h2 className="font-semibold">Blockchain Wallet</h2>
         </div>
         <div className="mb-6">
           <label className="text-sm text-muted-foreground">Wallet Address</label>
-          <div className="mt-1 font-mono text-sm bg-secondary/50 px-4 py-3 rounded-lg">
+          <div className="mt-1 font-mono text-sm bg-secondary px-4 py-3 rounded-lg">
             {user?.wallet_address || "—"}
           </div>
         </div>
 
         <div className="border-t border-border pt-6">
           <h3 className="font-medium mb-2 flex items-center gap-2">
-            <Key className="w-4 h-4 text-yellow-400" />
+            <Key className="w-4 h-4 text-amber-700" />
             Export Private Key
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
@@ -85,13 +92,13 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-yellow-400 font-medium">PRIVATE KEY — KEEP SECRET</span>
+                  <span className="text-xs text-amber-700 font-medium">PRIVATE KEY — KEEP SECRET</span>
                   <button onClick={copyKey} className="text-xs flex items-center gap-1 text-muted-foreground hover:text-foreground">
                     {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                     {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <code className="text-xs break-all text-yellow-300">{exportedKey}</code>
+                <code className="text-xs break-all text-amber-800">{exportedKey}</code>
               </div>
               <button onClick={() => setExportedKey("")} className="text-sm text-muted-foreground hover:text-foreground">
                 Clear
@@ -104,45 +111,64 @@ export default function SettingsPage() {
                 value={exportPw}
                 onChange={(e) => setExportPw(e.target.value)}
                 placeholder="Enter your password"
-                className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-input text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-foreground/15"
                 required
               />
               <button
                 type="submit"
                 disabled={exporting}
-                className="px-4 py-2.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-lg text-sm font-medium hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                className="px-4 py-2.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors disabled:opacity-50"
               >
                 {exporting ? "Decrypting..." : "Export"}
               </button>
             </form>
           )}
-          {exportError && <p className="text-red-400 text-sm mt-2">{exportError}</p>}
+          {exportError && <p className="text-red-700 text-sm mt-2">{exportError}</p>}
         </div>
       </div>
 
       {/* Notifications */}
-      <div className="rounded-2xl border border-border bg-card/50 p-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Bell className="w-5 h-5 text-green-400" />
+          <Bell className="w-5 h-5" />
           <h2 className="font-semibold">Notification Preferences</h2>
         </div>
-        <div className="space-y-4">
-          {[
-            { label: "Critical slashing events", desc: "Get notified immediately for critical severity" },
-            { label: "Insurance claim updates", desc: "Status changes on submitted claims" },
-            { label: "Operator status changes", desc: "When operators are jailed or slashed" },
-            { label: "Weekly risk digest", desc: "Weekly summary of risk scores and trends" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+        <div className="space-y-1">
+          {([
+            { key: "critical_slashing", label: "Critical slashing events", desc: "Get notified immediately for critical severity" },
+            { key: "claim_updates", label: "Insurance claim updates", desc: "Status changes on submitted claims" },
+            { key: "operator_status", label: "Operator status changes", desc: "When operators are jailed or slashed" },
+            { key: "weekly_digest", label: "Weekly risk digest", desc: "Weekly summary of risk scores and trends" },
+          ] as const).map((item) => (
+            <div key={item.key} className="flex items-center justify-between py-3.5 border-b border-border last:border-0">
               <div>
                 <div className="text-sm font-medium">{item.label}</div>
-                <div className="text-xs text-muted-foreground">{item.desc}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{item.desc}</div>
               </div>
-              <div className="w-10 h-6 bg-blue-600 rounded-full relative cursor-pointer">
-                <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
-              </div>
+              <button
+                type="button"
+                onClick={() => setNotifs(n => ({ ...n, [item.key]: !n[item.key] }))}
+                className={cn(
+                  "w-10 h-6 rounded-full relative transition-colors",
+                  notifs[item.key] ? "bg-foreground" : "bg-border"
+                )}
+              >
+                <div className={cn(
+                  "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                  notifs[item.key] ? "right-1" : "left-1"
+                )} />
+              </button>
             </div>
           ))}
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={() => { setSavedNotifs(true); setTimeout(() => setSavedNotifs(false), 2500); }}
+            className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg text-sm font-medium hover:opacity-85 transition-opacity"
+          >
+            {savedNotifs ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {savedNotifs ? "Saved!" : "Save Preferences"}
+          </button>
         </div>
       </div>
     </div>

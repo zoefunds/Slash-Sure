@@ -46,12 +46,12 @@ function ApproveModal({
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-2xl p-8 text-center space-y-4">
-          <CheckCircle className="w-12 h-12 text-green-400 mx-auto" />
+          <CheckCircle className="w-12 h-12 text-green-700 mx-auto" />
           <h2 className="text-lg font-bold">{approved ? "Slashing Approved" : "Case Rejected"}</h2>
           <p className="text-muted-foreground text-sm">The on-chain transaction has been submitted.</p>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            className="px-6 py-2.5 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-85 transition-opacity"
           >
             Close
           </button>
@@ -68,7 +68,7 @@ function ApproveModal({
           Approve or reject this AI-recommended slashing decision
         </p>
 
-        <div className="p-4 rounded-xl bg-secondary/30 border border-border space-y-2 mb-6 text-sm">
+        <div className="p-4 rounded-xl bg-secondary border border-border space-y-2 mb-6 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Violation</span>
             <span className="capitalize">{caseItem.violation_type?.replace(/_/g, " ")}</span>
@@ -85,7 +85,7 @@ function ApproveModal({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Recommended Slash</span>
-            <span className="text-red-400 font-mono">
+            <span className="text-red-700 font-mono">
               {caseItem.recommended_slash_amount !== undefined
                 ? `${formatNumber(caseItem.recommended_slash_amount)} GEN`
                 : "—"}
@@ -104,7 +104,7 @@ function ApproveModal({
             onChange={(e) => setReason(e.target.value)}
             placeholder="Provide a reason for approval or rejection…"
             rows={3}
-            className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm resize-none"
+            className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm resize-none"
           />
         </div>
 
@@ -118,7 +118,7 @@ function ApproveModal({
           <button
             onClick={() => { setApproved(false); mutation.mutate({ approved: false, reason }); }}
             disabled={mutation.isPending}
-            className="flex-1 py-2.5 rounded-lg bg-red-600/20 border border-red-500/30 hover:bg-red-600/30 text-red-400 text-sm font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+            className="flex-1 py-2.5 rounded-lg bg-red-100 border border-red-200 hover:bg-red-200 text-red-700 text-sm font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {mutation.isPending && approved === false ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
             Reject
@@ -126,7 +126,7 @@ function ApproveModal({
           <button
             onClick={() => { setApproved(true); mutation.mutate({ approved: true, reason }); }}
             disabled={mutation.isPending}
-            className="flex-1 py-2.5 rounded-lg bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 text-sm font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+            className="flex-1 py-2.5 rounded-lg bg-green-100 border border-green-200 hover:bg-green-200 text-green-700 text-sm font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {mutation.isPending && approved === true ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             Approve
@@ -168,8 +168,8 @@ export default function SlashingPage() {
             className={cn(
               "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize",
               statusFilter === s
-                ? "bg-blue-600 border-blue-600 text-white"
-                : "border-border text-muted-foreground hover:border-blue-500/50",
+                ? "bg-foreground border-foreground text-background"
+                : "border-border text-muted-foreground hover:border-foreground/30",
             )}
           >
             {s || "All statuses"}
@@ -177,7 +177,7 @@ export default function SlashingPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
           <Zap className="w-4 h-4 text-orange-400" />
           <h2 className="font-semibold">All Cases</h2>
@@ -185,7 +185,7 @@ export default function SlashingPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-secondary/30">
+            <thead className="bg-secondary">
               <tr>
                 {["Case #", "Violation", "Network", "Status", "Fault Prob.", "Slash Amount", "Tx Hash", "Created", "Action"].map((h) => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">
@@ -199,8 +199,8 @@ export default function SlashingPage() {
                 <tr><td colSpan={9} className="px-6 py-16 text-center text-muted-foreground">Loading…</td></tr>
               )}
               {data?.items?.map((c: SlashCase) => (
-                <tr key={c.id} className="hover:bg-secondary/20 transition-colors">
-                  <td className="px-4 py-4 font-mono text-blue-400 whitespace-nowrap">{c.case_number}</td>
+                <tr key={c.id} className="hover:bg-secondary transition-colors">
+                  <td className="px-4 py-4 font-mono text-foreground whitespace-nowrap">{c.case_number}</td>
                   <td className="px-4 py-4 capitalize whitespace-nowrap">{c.violation_type?.replace(/_/g, " ")}</td>
                   <td className="px-4 py-4 text-muted-foreground">{c.network}</td>
                   <td className="px-4 py-4">
@@ -211,7 +211,7 @@ export default function SlashingPage() {
                   <td className="px-4 py-4 font-mono">
                     {c.ai_fault_probability !== undefined ? `${c.ai_fault_probability}%` : "—"}
                   </td>
-                  <td className="px-4 py-4 font-mono text-red-400">
+                  <td className="px-4 py-4 font-mono text-red-700">
                     {c.recommended_slash_amount !== undefined
                       ? `${formatNumber(c.recommended_slash_amount)} GEN`
                       : "—"}

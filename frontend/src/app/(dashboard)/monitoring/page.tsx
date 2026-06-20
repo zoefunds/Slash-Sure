@@ -23,15 +23,15 @@ export default function MonitoringPage() {
         <p className="text-muted-foreground mt-1">Real-time blockchain events and security alerts</p>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-            <Activity className="w-4 h-4 text-blue-400" />
+            <Activity className="w-4 h-4 text-muted-foreground" />
             <h2 className="font-semibold">Network Events</h2>
             <span className="ml-auto text-xs text-muted-foreground">{events?.total ?? 0} total</span>
           </div>
           <div className="divide-y divide-border max-h-96 overflow-y-auto">
             {events?.items?.length ? events.items.map((e: { id: string; event_type: string; network: string; severity: string; summary: string; occurred_at: string }) => (
-              <div key={e.id} className="px-6 py-3 hover:bg-secondary/20 transition-colors">
+              <div key={e.id} className="px-6 py-3 hover:bg-secondary/50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -53,15 +53,15 @@ export default function MonitoringPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-            <Bell className="w-4 h-4 text-yellow-400" />
+            <Bell className="w-4 h-4 text-muted-foreground" />
             <h2 className="font-semibold">Active Alerts</h2>
             <span className="ml-auto text-xs text-muted-foreground">{alerts?.total ?? 0} unacknowledged</span>
           </div>
           <div className="divide-y divide-border max-h-96 overflow-y-auto">
             {alerts?.items?.length ? alerts.items.map((a: { id: string; title: string; message: string; severity: string; created_at: string }) => (
-              <div key={a.id} className="px-6 py-3 hover:bg-secondary/20 transition-colors">
+              <div key={a.id} className="px-6 py-3 hover:bg-secondary/50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -73,7 +73,7 @@ export default function MonitoringPage() {
                     <div className="text-xs text-muted-foreground mt-0.5">{a.message}</div>
                   </div>
                   <button onClick={async () => { await monitoringApi.acknowledgeAlert(a.id); refetchAlerts(); }}
-                    className="text-xs text-muted-foreground hover:text-green-400 flex items-center gap-1 transition-colors shrink-0">
+                    className="text-xs text-muted-foreground hover:text-green-700 flex items-center gap-1 transition-colors shrink-0">
                     <CheckCheck className="w-3.5 h-3.5" /> Ack
                   </button>
                 </div>

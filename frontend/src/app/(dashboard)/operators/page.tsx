@@ -60,7 +60,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
         value={form[key]}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
         placeholder={placeholder}
-        className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+        className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
       />
     </div>
   );
@@ -76,7 +76,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -90,7 +90,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
             <select
               value={form.network}
               onChange={(e) => setForm((f) => ({ ...f, network: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
             >
               {NETWORKS.map((n) => (
                 <option key={n} value={n}>{n.charAt(0).toUpperCase() + n.slice(1)}</option>
@@ -110,14 +110,14 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-secondary/50 transition-colors"
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 rounded-lg bg-foreground text-background disabled:opacity-50 hover:opacity-85 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
             >
               {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
               {mutation.isPending ? "Registering…" : "Register On-Chain"}
@@ -151,7 +151,7 @@ export default function OperatorsPage() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg text-sm font-medium hover:opacity-85 transition-opacity"
         >
           <Plus className="w-4 h-4" /> Add Operator
         </button>
@@ -166,8 +166,8 @@ export default function OperatorsPage() {
             className={cn(
               "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize",
               network === n
-                ? "bg-blue-600 border-blue-600 text-white"
-                : "border-border text-muted-foreground hover:border-blue-500/50",
+                ? "bg-foreground border-foreground text-background"
+                : "border-border text-muted-foreground hover:border-foreground/30",
             )}
           >
             {n || "All networks"}
@@ -175,15 +175,15 @@ export default function OperatorsPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-border bg-card/50 overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-          <Users className="w-4 h-4 text-blue-400" />
+          <Users className="w-4 h-4 text-muted-foreground" />
           <h2 className="font-semibold">All Operators</h2>
           <span className="ml-auto text-xs text-muted-foreground">{data?.total ?? 0} total</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-secondary/30">
+            <thead className="bg-secondary">
               <tr>
                 {["Operator", "Network", "Status", "Stake", "Uptime", "Slashes"].map((h) => (
                   <th key={h} className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">{h}</th>
@@ -198,7 +198,7 @@ export default function OperatorsPage() {
                 id: string; name: string; address: string; network: string;
                 status: string; total_stake: number; uptime_percentage: number; slash_count: number;
               }) => (
-                <tr key={op.id} className="hover:bg-secondary/20 transition-colors">
+                <tr key={op.id} className="hover:bg-secondary transition-colors">
                   <td className="px-6 py-4">
                     <div className="font-medium">{op.name}</div>
                     <div className="text-xs text-muted-foreground font-mono">{truncateAddress(op.address)}</div>
@@ -212,15 +212,15 @@ export default function OperatorsPage() {
                   <td className="px-6 py-4 font-mono">{formatNumber(op.total_stake)} GEN</td>
                   <td className="px-6 py-4">
                     <span className={
-                      op.uptime_percentage >= 99 ? "text-green-400"
-                      : op.uptime_percentage >= 95 ? "text-yellow-400"
-                      : "text-red-400"
+                      op.uptime_percentage >= 99 ? "text-green-700"
+                      : op.uptime_percentage >= 95 ? "text-amber-700"
+                      : "text-red-700"
                     }>
                       {op.uptime_percentage.toFixed(2)}%
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={op.slash_count > 0 ? "text-red-400 font-medium" : "text-muted-foreground"}>
+                    <span className={op.slash_count > 0 ? "text-red-700 font-medium" : "text-muted-foreground"}>
                       {op.slash_count}
                     </span>
                   </td>
@@ -231,7 +231,7 @@ export default function OperatorsPage() {
           {!isLoading && !data?.items?.length && (
             <div className="px-6 py-16 text-center text-muted-foreground">
               No operators registered yet —{" "}
-              <button onClick={() => setShowModal(true)} className="text-blue-400 hover:underline">
+              <button onClick={() => setShowModal(true)} className="underline hover:text-foreground">
                 add one
               </button>
             </div>

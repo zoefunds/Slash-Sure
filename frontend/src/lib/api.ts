@@ -118,19 +118,22 @@ export const riskApi = {
     api.post("/risk/reputation/compute", data),
   predict: (data: Record<string, unknown>) =>
     api.post("/risk/predict", data),
-  profile: (address: string) => api.get(`/risk/operator/${address}`),
+  getOperatorRisk: (address: string) => api.get(`/risk/operator/${address}`),
 };
 
-// GenLayer on-chain
+// GenLayer on-chain — all calls go to StudioNet which can be slow
 export const CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d";
 
 export const genlayerApi = {
-  getContractStats: () => api.get("/genlayer/stats"),
-  getOperator: (address: string) => api.get(`/genlayer/operators/${address}`),
-  getVerdict: (incidentId: string) => api.get(`/genlayer/verdicts/${incidentId}`),
-  getCase: (caseId: string) => api.get(`/genlayer/cases/${caseId}`),
-  getClaim: (claimId: string) => api.get(`/genlayer/claims/${claimId}`),
-  getRiskPrediction: (address: string) => api.get(`/genlayer/risk/${address}`),
-  getAuditEntry: (index: number) => api.get(`/genlayer/audit/${index}`),
+  // 12s timeout — StudioNet can be slow; callers should handle rejection gracefully
+  getContractStats: () => api.get("/genlayer/stats", { timeout: 12000 }),
+  getOperator: (address: string) => api.get(`/genlayer/operators/${address}`, { timeout: 12000 }),
+  getVerdict: (incidentId: string) => api.get(`/genlayer/verdicts/${incidentId}`, { timeout: 12000 }),
+  getCase: (caseId: string) => api.get(`/genlayer/cases/${caseId}`, { timeout: 12000 }),
+  getClaim: (claimId: string) => api.get(`/genlayer/claims/${claimId}`, { timeout: 12000 }),
+  getAuditEntry: (index: number) => api.get(`/genlayer/audit/${index}`, { timeout: 12000 }),
+  getProposals: () => api.get("/genlayer/proposals", { timeout: 12000 }),
+  vote: (proposalId: string, vote: boolean) =>
+    api.post(`/genlayer/proposals/${proposalId}/vote`, { vote }, { timeout: 20000 }),
 };
 
