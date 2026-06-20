@@ -11,6 +11,7 @@ from app.db.base import get_db
 from app.models.insurance import InsuranceClaim, InsurancePayout, ClaimStatus
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/insurance", tags=["Insurance"])
 
@@ -99,6 +100,7 @@ async def submit_claim(
         body.claimant_address,
         int(body.coverage_amount),
         int(body.claimed_amount),
+        str(current_user.id),
     )
 
     return {"id": claim_id, "claim_number": claim_number, "status": "submitted"}
@@ -110,12 +112,14 @@ async def _submit_and_adjudicate_claim(
     claimant_address: str,
     coverage_amount: int,
     claimed_amount: int,
+    user_id: str,
 ):
     from app.db.base import AsyncSessionLocal
     from sqlalchemy import update
     from app.models.insurance import InsuranceClaim
 
     async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db)
         try:
             await genlayer_client.submit_claim(
                 claim_id=claim_id,
@@ -124,6 +128,7 @@ async def _submit_and_adjudicate_claim(
                 claimant_address=claimant_address,
                 coverage_amount=coverage_amount,
                 claimed_amount=claimed_amount,
+                signer_private_key=signer_key,
             )
             tx = await genlayer_client.adjudicate_claim(
                 claim_id=claim_id,
@@ -132,6 +137,7 @@ async def _submit_and_adjudicate_claim(
                 damage_evidence=f"Claimed: {claimed_amount} GEN, Coverage: {coverage_amount} GEN",
                 negligence_score=60,
                 claimant_history="No prior fraudulent claims",
+                signer_private_key=signer_key,
             )
             await db.execute(
                 update(InsuranceClaim)
@@ -204,11 +210,13 @@ async def authorize_payout(
     )
     db.add(payout)
 
+    signer_key = await get_user_private_key(str(current_user.id), db)
     tx = await genlayer_client.authorize_payout(
         claim_id=claim_id,
         payout_id=payout_id,
         amount=int(body.amount),
         recipient=body.recipient_address,
+        signer_private_key=signer_key,
     )
     payout.genlayer_approval_hash = tx.get("tx_hash")
 

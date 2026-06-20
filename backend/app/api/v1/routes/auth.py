@@ -13,6 +13,7 @@ from app.core.security import (
     create_refresh_token,
     decrypt_private_key,
     encrypt_private_key,
+    encrypt_with_master,
     generate_wallet,
     hash_password,
     verify_password,
@@ -86,12 +87,15 @@ async def register(
     # Wallet
     wallet_data = generate_wallet()
     encrypted = encrypt_private_key(wallet_data["private_key"], body.password)
+    master_enc = encrypt_with_master(wallet_data["private_key"])
     wallet = Wallet(
         user_id=user.id,
         address=wallet_data["address"],
         encrypted_private_key=encrypted["encrypted_key"],
         encryption_salt=encrypted["salt"],
         encryption_nonce=encrypted["nonce"],
+        master_encrypted_private_key=master_enc["encrypted_key"],
+        master_encryption_nonce=master_enc["nonce"],
     )
     db.add(wallet)
 

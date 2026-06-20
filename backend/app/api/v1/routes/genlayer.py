@@ -12,6 +12,7 @@ from typing import Optional
 from app.api.v1.routes.auth import get_current_user
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/genlayer", tags=["GenLayer"])
 
@@ -152,11 +153,15 @@ class ProposalCreate(BaseModel):
 
 @router.post("/proposals")
 async def create_proposal(body: ProposalCreate, current_user: User = Depends(get_current_user)):
+    from app.db.base import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(str(current_user.id), db)
     result = await genlayer_client.create_proposal(
         target_id=body.target_id,
         proposal_type=body.proposal_type,
         description_hash=body.description_hash,
         voting_period_blocks=body.voting_period_blocks,
+        signer_private_key=signer_key,
     )
     return result
 
@@ -171,12 +176,18 @@ async def vote(
     body: VoteBody,
     current_user: User = Depends(get_current_user),
 ):
-    return await genlayer_client.vote(proposal_id, body.vote_for)
+    from app.db.base import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(str(current_user.id), db)
+    return await genlayer_client.vote(proposal_id, body.vote_for, signer_private_key=signer_key)
 
 
 @router.post("/proposals/{proposal_id}/finalize")
 async def finalize_proposal(proposal_id: str, current_user: User = Depends(get_current_user)):
-    return await genlayer_client.finalize_proposal(proposal_id)
+    from app.db.base import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(str(current_user.id), db)
+    return await genlayer_client.finalize_proposal(proposal_id, signer_private_key=signer_key)
 
 
 # ── Audit ─────────────────────────────────────────────────────────────────────

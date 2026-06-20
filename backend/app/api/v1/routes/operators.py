@@ -12,6 +12,7 @@ from app.db.base import get_db
 from app.models.operator import Operator, OperatorStatus
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.signer import get_user_private_key
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -86,12 +87,16 @@ async def list_operators(
     }
 
 
-async def _register_on_chain(address: str, name: str, network: str, stake: int) -> None:
+async def _register_on_chain(address: str, name: str, network: str, stake: int, user_id: str) -> None:
+    from app.db.base import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db)
     try:
         await asyncio.wait_for(
             genlayer_client.register_operator(
                 address=address, name=name, network=network,
                 stake=stake, metadata_hash="",
+                signer_private_key=signer_key,
             ),
             timeout=30.0,
         )
@@ -126,7 +131,8 @@ async def create_operator(
 
     # Fire-and-forget on-chain registration — don't block the response
     background_tasks.add_task(
-        _register_on_chain, body.address, body.name, body.network, int(body.total_stake)
+        _register_on_chain, body.address, body.name, body.network,
+        int(body.total_stake), str(current_user.id)
     )
 
     return {"id": str(operator.id), "address": operator.address, "status": "registered"}

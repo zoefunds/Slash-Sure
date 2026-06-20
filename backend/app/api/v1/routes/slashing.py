@@ -11,6 +11,7 @@ from app.db.base import get_db
 from app.models.slashing import SlashingCase, SlashingStatus
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/slashing", tags=["Slashing"])
 
@@ -108,6 +109,7 @@ async def create_slashing_case(
         body.violation_type,
         body.network,
         int(body.stake_at_risk),
+        str(current_user.id),
     )
 
     return {"id": case_id_str, "case_number": case_number, "status": "pending"}
@@ -120,12 +122,14 @@ async def _create_and_recommend_slashing(
     violation_type: str,
     network: str,
     stake_at_risk: int,
+    user_id: str,
 ):
     from app.db.base import AsyncSessionLocal
     from sqlalchemy import update
     from app.models.slashing import SlashingCase
 
     async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db)
         try:
             await genlayer_client.create_slashing_case(
                 case_id=case_id,
@@ -134,6 +138,7 @@ async def _create_and_recommend_slashing(
                 violation_type=violation_type,
                 network=network,
                 stake_at_risk=stake_at_risk,
+                signer_private_key=signer_key,
             )
             result = await genlayer_client.generate_slash_recommendation(
                 case_id=case_id,
@@ -141,6 +146,7 @@ async def _create_and_recommend_slashing(
                 operator_history="Obtained from monitoring records",
                 network_policy=f"{network} standard slashing policy",
                 current_reputation=80,
+                signer_private_key=signer_key,
             )
             await db.execute(
                 update(SlashingCase)
@@ -203,12 +209,13 @@ async def approve_slashing(
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
+    signer_key = await get_user_private_key(str(current_user.id), db)
     if body.approved:
         case.status = SlashingStatus.APPROVED
-        tx = await genlayer_client.send_transaction("approve_slashing", [case_id])
+        tx = await genlayer_client.send_transaction("approve_slashing", [case_id], signer_private_key=signer_key)
         case.genlayer_tx_hash = tx.get("tx_hash")
     else:
         case.status = SlashingStatus.REJECTED
-        await genlayer_client.send_transaction("reject_slashing", [case_id, body.reason or ""])
+        await genlayer_client.send_transaction("reject_slashing", [case_id, body.reason or ""], signer_private_key=signer_key)
 
     return {"case_id": case_id, "approved": body.approved, "status": case.status}

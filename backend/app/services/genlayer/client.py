@@ -43,17 +43,33 @@ class GenLayerClient:
         function_name: str,
         args: list,
         wait_for_receipt: bool = True,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
-        """Send a write transaction to the SlashSure contract."""
+        """Send a write transaction to the SlashSure contract.
+
+        signer_private_key: if provided, signs as that user's wallet;
+        otherwise falls back to the server deployer key (if configured).
+        """
         if not self.contract_address:
             logger.warning("Contract address not set — skipping on-chain call: %s", function_name)
             return {"tx_hash": None, "status": "skipped", "function": function_name}
+
+        # Resolve sender address
+        if signer_private_key:
+            from eth_account import Account as EthAccount
+            sender = EthAccount.from_key(signer_private_key).address
+        else:
+            sender = self._deployer_address()
+
+        if sender == "0x0000000000000000000000000000000000000000":
+            logger.warning("No signer available — skipping on-chain call: %s", function_name)
+            return {"tx_hash": None, "status": "skipped", "reason": "no_signer"}
 
         try:
             result = await self._call_rpc(
                 "gen_sendTransaction",
                 [{
-                    "from": self._deployer_address(),
+                    "from": sender,
                     "to": self.contract_address,
                     "function": function_name,
                     "args": args,
@@ -61,7 +77,7 @@ class GenLayerClient:
                 }],
             )
             tx_hash = result.get("transactionHash") or result.get("tx_hash")
-            logger.info("GenLayer tx sent: %s → %s", function_name, tx_hash)
+            logger.info("GenLayer tx sent: %s → %s (from %s)", function_name, tx_hash, sender)
 
             if wait_for_receipt and tx_hash:
                 receipt = await self._wait_for_receipt(tx_hash)
@@ -115,20 +131,22 @@ class GenLayerClient:
     # ── Operator Management ───────────────────────────────────────────────────
 
     async def register_operator(
-        self, address: str, name: str, network: str, stake: int, metadata_hash: str
+        self, address: str, name: str, network: str, stake: int, metadata_hash: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
-            "register_operator", [address, name, network, stake, metadata_hash]
+            "register_operator", [address, name, network, stake, metadata_hash],
+            signer_private_key=signer_private_key,
         )
 
-    async def update_operator_stake(self, address: str, new_stake: int) -> dict:
-        return await self.send_transaction("update_operator_stake", [address, new_stake])
+    async def update_operator_stake(self, address: str, new_stake: int, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("update_operator_stake", [address, new_stake], signer_private_key=signer_private_key)
 
-    async def update_operator_status(self, address: str, status: str) -> dict:
-        return await self.send_transaction("update_operator_status", [address, status])
+    async def update_operator_status(self, address: str, status: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("update_operator_status", [address, status], signer_private_key=signer_private_key)
 
-    async def whitelist_operator(self, address: str) -> dict:
-        return await self.send_transaction("whitelist_operator", [address])
+    async def whitelist_operator(self, address: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("whitelist_operator", [address], signer_private_key=signer_private_key)
 
     async def get_operator(self, address: str) -> Optional[dict]:
         return await self.call_view("get_operator", [address])
@@ -167,11 +185,13 @@ class GenLayerClient:
         merkle_root: str,
         evidence_count: int,
         evidence_summary_hash: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "submit_evidence",
             [incident_id, operator_address, violation_type, network,
              block_number, merkle_root, evidence_count, evidence_summary_hash],
+            signer_private_key=signer_private_key,
         )
 
     async def get_evidence(self, incident_id: str) -> Optional[dict]:
@@ -195,12 +215,14 @@ class GenLayerClient:
         uptime_pct: int,
         prior_slash_count: int,
         reputation: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "analyze_fault",
             [incident_id, operator_address, violation_type, network,
              evidence_summary, operator_history, stake_amount,
              uptime_pct, prior_slash_count, reputation],
+            signer_private_key=signer_private_key,
         )
 
     async def get_verdict(self, incident_id: str) -> Optional[dict]:
@@ -216,10 +238,12 @@ class GenLayerClient:
         violation_type: str,
         network: str,
         stake_at_risk: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "create_slashing_case",
             [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
+            signer_private_key=signer_private_key,
         )
 
     async def generate_slash_recommendation(
@@ -229,23 +253,25 @@ class GenLayerClient:
         operator_history: str,
         network_policy: str,
         current_reputation: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "generate_slash_recommendation",
             [case_id, evidence_summary, operator_history, network_policy, current_reputation],
+            signer_private_key=signer_private_key,
         )
 
-    async def approve_slashing(self, case_id: str) -> dict:
-        return await self.send_transaction("approve_slashing", [case_id])
+    async def approve_slashing(self, case_id: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("approve_slashing", [case_id], signer_private_key=signer_private_key)
 
-    async def reject_slashing(self, case_id: str, reason: str) -> dict:
-        return await self.send_transaction("reject_slashing", [case_id, reason])
+    async def reject_slashing(self, case_id: str, reason: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("reject_slashing", [case_id, reason], signer_private_key=signer_private_key)
 
-    async def execute_slashing(self, case_id: str, actual_slash_amount: int) -> dict:
-        return await self.send_transaction("execute_slashing", [case_id, actual_slash_amount])
+    async def execute_slashing(self, case_id: str, actual_slash_amount: int, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("execute_slashing", [case_id, actual_slash_amount], signer_private_key=signer_private_key)
 
-    async def appeal_slashing(self, case_id: str, rationale_hash: str) -> dict:
-        return await self.send_transaction("appeal_slashing", [case_id, rationale_hash])
+    async def appeal_slashing(self, case_id: str, rationale_hash: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("appeal_slashing", [case_id, rationale_hash], signer_private_key=signer_private_key)
 
     async def ai_review_appeal(
         self,
@@ -253,10 +279,12 @@ class GenLayerClient:
         original_summary: str,
         appeal_arguments: str,
         new_evidence: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "ai_review_appeal",
             [case_id, original_summary, appeal_arguments, new_evidence],
+            signer_private_key=signer_private_key,
         )
 
     async def get_slashing_case(self, case_id: str) -> Optional[dict]:
@@ -272,10 +300,12 @@ class GenLayerClient:
         claimant_address: str,
         coverage_amount: int,
         claimed_amount: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "submit_claim",
             [claim_id, organization, incident_id, claimant_address, coverage_amount, claimed_amount],
+            signer_private_key=signer_private_key,
         )
 
     async def adjudicate_claim(
@@ -286,22 +316,26 @@ class GenLayerClient:
         damage_evidence: str,
         negligence_score: int,
         claimant_history: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "adjudicate_claim",
             [claim_id, incident_summary, policy_terms, damage_evidence,
              negligence_score, claimant_history],
+            signer_private_key=signer_private_key,
         )
 
     async def authorize_payout(
-        self, claim_id: str, payout_id: str, amount: int, recipient: str
+        self, claim_id: str, payout_id: str, amount: int, recipient: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
-            "authorize_payout", [claim_id, payout_id, amount, recipient]
+            "authorize_payout", [claim_id, payout_id, amount, recipient],
+            signer_private_key=signer_private_key,
         )
 
-    async def complete_payout(self, payout_id: str, tx_hash: str) -> dict:
-        return await self.send_transaction("complete_payout", [payout_id, tx_hash])
+    async def complete_payout(self, payout_id: str, tx_hash: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("complete_payout", [payout_id, tx_hash], signer_private_key=signer_private_key)
 
     async def get_claim(self, claim_id: str) -> Optional[dict]:
         return await self.call_view("get_claim", [claim_id])
@@ -325,12 +359,14 @@ class GenLayerClient:
         peer_score: int,
         stake_stability: int,
         network: str,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "compute_reputation",
             [operator_address, uptime_30d, uptime_90d, slash_total, slash_90d,
              incident_90d, missed_30d, total_30d, oracle_score, peer_score,
              stake_stability, network],
+            signer_private_key=signer_private_key,
         )
 
     async def predict_risk(
@@ -344,12 +380,14 @@ class GenLayerClient:
         days_since_incident: int,
         stake_growth_rate: int,
         delegator_change_rate: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "predict_risk",
             [operator_address, perf_trend, infra_alerts, peer_comparison,
              market_conditions, historical_patterns, days_since_incident,
              stake_growth_rate, delegator_change_rate],
+            signer_private_key=signer_private_key,
         )
 
     async def get_risk_prediction(self, operator_address: str) -> Optional[dict]:
@@ -363,17 +401,19 @@ class GenLayerClient:
         proposal_type: str,
         description_hash: str,
         voting_period_blocks: int,
+        signer_private_key: Optional[str] = None,
     ) -> dict:
         return await self.send_transaction(
             "create_proposal",
             [target_id, proposal_type, description_hash, voting_period_blocks],
+            signer_private_key=signer_private_key,
         )
 
-    async def vote(self, proposal_id: str, vote_for: bool) -> dict:
-        return await self.send_transaction("vote", [proposal_id, vote_for])
+    async def vote(self, proposal_id: str, vote_for: bool, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("vote", [proposal_id, vote_for], signer_private_key=signer_private_key)
 
-    async def finalize_proposal(self, proposal_id: str) -> dict:
-        return await self.send_transaction("finalize_proposal", [proposal_id])
+    async def finalize_proposal(self, proposal_id: str, signer_private_key: Optional[str] = None) -> dict:
+        return await self.send_transaction("finalize_proposal", [proposal_id], signer_private_key=signer_private_key)
 
     async def get_proposal(self, proposal_id: str) -> Optional[dict]:
         return await self.call_view("get_proposal", [proposal_id])

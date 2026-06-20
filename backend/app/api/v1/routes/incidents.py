@@ -13,6 +13,7 @@ from app.models.incident import Incident, IncidentEvidence, IncidentStatus
 from app.models.operator import Operator
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client, compute_merkle_root
+from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -149,6 +150,7 @@ async def create_incident(
         operator.uptime_percentage if operator else 100,
         operator.slash_count if operator else 0,
         int(operator.total_stake) if operator else 0,
+        str(current_user.id),
     )
 
     return {
@@ -172,9 +174,11 @@ async def _submit_evidence_and_analyze(
     uptime_pct: float,
     slash_count: int,
     stake_amount: int,
+    user_id: str,
 ):
     from app.db.base import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db)
         try:
             # Submit evidence on-chain
             await genlayer_client.submit_evidence(
@@ -186,6 +190,7 @@ async def _submit_evidence_and_analyze(
                 merkle_root=merkle_root,
                 evidence_count=evidence_count,
                 evidence_summary_hash=evidence_summary_hash,
+                signer_private_key=signer_key,
             )
 
             # Trigger AI fault analysis
@@ -200,6 +205,7 @@ async def _submit_evidence_and_analyze(
                 uptime_pct=int(uptime_pct),
                 prior_slash_count=slash_count,
                 reputation=80,
+                signer_private_key=signer_key,
             )
 
             # Update incident in DB with AI results

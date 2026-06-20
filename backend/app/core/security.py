@@ -96,6 +96,26 @@ def decrypt_private_key(encrypted_key: str, salt: str, nonce: str, password: str
     return plaintext.decode()
 
 
+_MASTER_SALT = b"slashsure-wallet-v1-master-salt-"  # fixed 32-byte salt
+
+
+def encrypt_with_master(private_key: str) -> dict:
+    """Encrypt a wallet private key with the server WALLET_MASTER_KEY."""
+    key = derive_key_from_password(settings.WALLET_MASTER_KEY, _MASTER_SALT)
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, private_key.encode(), None)
+    return {"encrypted_key": ciphertext.hex(), "nonce": nonce.hex()}
+
+
+def decrypt_with_master(encrypted_key: str, nonce: str) -> str:
+    """Decrypt a wallet private key using the server WALLET_MASTER_KEY."""
+    key = derive_key_from_password(settings.WALLET_MASTER_KEY, _MASTER_SALT)
+    aesgcm = AESGCM(key)
+    plaintext = aesgcm.decrypt(bytes.fromhex(nonce), bytes.fromhex(encrypted_key), None)
+    return plaintext.decode()
+
+
 # ─── Webhook Signature ─────────────────────────────────────────────────────────
 
 def sign_webhook_payload(payload: str) -> str:

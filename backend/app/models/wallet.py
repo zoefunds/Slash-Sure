@@ -19,6 +19,8 @@ class Wallet(Base):
     encrypted_private_key: Mapped[str] = mapped_column(Text, nullable=False)
     encryption_salt: Mapped[str] = mapped_column(String(64), nullable=False)
     encryption_nonce: Mapped[str] = mapped_column(String(64), nullable=False)
+    master_encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    master_encryption_nonce: Mapped[str | None] = mapped_column(String(64), nullable=True)
     chain_id: Mapped[int] = mapped_column(default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
