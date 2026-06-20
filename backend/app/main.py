@@ -43,8 +43,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    from app.services.genlayer.client import genlayer_client
-    await genlayer_client.close()
+    # genlayer_client uses synchronous SDK — no async close needed
 
     from app.core.redis import close_redis
     await close_redis()
