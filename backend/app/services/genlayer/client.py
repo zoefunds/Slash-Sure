@@ -1,42 +1,63 @@
 """
 GenLayer client — all on-chain calls for SlashSure contract
 0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d (StudioNet)
+
+Uses genlayer-py SDK (>=0.8.1) with the proper write_contract/read_contract
+flow through the Consensus Main Contract.
 """
 
 import asyncio
+import functools
 import hashlib
 import json
 from typing import Any, Optional
 
-import httpx
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 
 CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d"
 
+# Lazy-initialise the SDK client once on first use
+_sdk_client = None
+
+
+def _get_sdk_client():
+    global _sdk_client
+    if _sdk_client is None:
+        from genlayer_py.chains.studionet import studionet
+        from genlayer_py.client.genlayer_client import GenLayerClient as SDKClient
+        _sdk_client = SDKClient(chain_config=studionet)
+    return _sdk_client
+
+
+def _account_from_key(private_key: str):
+    from eth_account import Account
+    return Account.from_key(private_key)
+
+
+def _fallback_account():
+    """Return a read-only account from the deployer key, or a deterministic dummy."""
+    pk = settings.GENLAYER_DEPLOYER_PRIVATE_KEY
+    if pk:
+        return _account_from_key(pk)
+    # deterministic throwaway — address 0x7E5F4…  (only used as sender in gen_call)
+    from eth_account import Account
+    return Account.from_key("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+
+async def _run_sync(fn, *args, **kwargs):
+    """Run a synchronous SDK call in the default thread-pool executor."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
+
 
 class GenLayerClient:
 
     def __init__(self):
-        self.rpc_url          = settings.GENLAYER_RPC_URL
         self.contract_address = settings.GENLAYER_CONTRACT_ADDRESS or CONTRACT_ADDRESS
-        self.private_key      = settings.GENLAYER_DEPLOYER_PRIVATE_KEY
-        self._http            = httpx.AsyncClient(timeout=30.0)
 
-    async def close(self):
-        await self._http.aclose()
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=30))
-    async def _call_rpc(self, method: str, params: list) -> Any:
-        payload = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
-        resp = await self._http.post(self.rpc_url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            raise Exception(f"GenLayer RPC error: {data['error']}")
-        return data.get("result", {})
+    # ── Core helpers ──────────────────────────────────────────────────────────
 
     async def send_transaction(
         self,
@@ -45,59 +66,57 @@ class GenLayerClient:
         wait_for_receipt: bool = True,
         signer_private_key: Optional[str] = None,
     ) -> dict:
-        """Send a write transaction to the SlashSure contract.
-
-        signer_private_key: if provided, signs as that user's wallet;
-        otherwise falls back to the server deployer key (if configured).
-        """
         if not self.contract_address:
-            logger.warning("Contract address not set — skipping on-chain call: %s", function_name)
+            logger.warning("Contract address not set — skipping: %s", function_name)
             return {"tx_hash": None, "status": "skipped", "function": function_name}
 
-        # Resolve sender address
-        if signer_private_key:
-            from eth_account import Account as EthAccount
-            sender = EthAccount.from_key(signer_private_key).address
-        else:
-            sender = self._deployer_address()
-
-        if sender == "0x0000000000000000000000000000000000000000":
-            logger.warning("No signer available — skipping on-chain call: %s", function_name)
-            return {"tx_hash": None, "status": "skipped", "reason": "no_signer"}
+        if not signer_private_key:
+            pk = settings.GENLAYER_DEPLOYER_PRIVATE_KEY
+            if not pk:
+                logger.warning("No signer available — skipping: %s", function_name)
+                return {"tx_hash": None, "status": "skipped", "reason": "no_signer"}
+            signer_private_key = pk
 
         try:
-            result = await self._call_rpc(
-                "gen_sendTransaction",
-                [{
-                    "from": sender,
-                    "to": self.contract_address,
-                    "function": function_name,
-                    "args": args,
-                    "value": 0,
-                }],
+            sdk = _get_sdk_client()
+            account = _account_from_key(signer_private_key)
+            tx_hash = await _run_sync(
+                sdk.write_contract,
+                self.contract_address,
+                function_name,
+                account,
+                None,   # consensus_max_rotations — use chain default
+                0,      # value
+                False,  # leader_only
+                args,   # positional args
+                None,   # kwargs
             )
-            tx_hash = result.get("transactionHash") or result.get("tx_hash")
-            logger.info("GenLayer tx sent: %s → %s (from %s)", function_name, tx_hash, sender)
-
-            if wait_for_receipt and tx_hash:
-                receipt = await self._wait_for_receipt(tx_hash)
-                return {"tx_hash": tx_hash, "receipt": receipt, "status": "confirmed"}
-            return {"tx_hash": tx_hash, "status": "pending"}
-
+            tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
+            logger.info("GenLayer tx sent: %s → %s", function_name, tx_hash_str)
+            return {"tx_hash": tx_hash_str, "status": "pending"}
         except Exception as exc:
             logger.error("GenLayer tx failed: %s — %s", function_name, exc)
             return {"tx_hash": None, "status": "failed", "error": str(exc)}
 
     async def call_view(self, function_name: str, args: list) -> Any:
-        """Call a view (read-only) function."""
         if not self.contract_address:
             return None
         try:
-            result = await self._call_rpc(
-                "gen_call",
-                [{"to": self.contract_address, "function": function_name, "args": args}],
+            sdk = _get_sdk_client()
+            account = _fallback_account()
+            result = await _run_sync(
+                sdk.read_contract,
+                self.contract_address,
+                function_name,
+                args,
+                None,    # kwargs
+                account,
             )
-            # View functions return JSON strings — parse them transparently
+            if isinstance(result, (bytes, bytearray)):
+                try:
+                    return json.loads(result.decode())
+                except Exception:
+                    return result.hex()
             if isinstance(result, str):
                 try:
                     return json.loads(result)
@@ -107,26 +126,6 @@ class GenLayerClient:
         except Exception as exc:
             logger.error("GenLayer view failed: %s — %s", function_name, exc)
             return None
-
-    async def _wait_for_receipt(self, tx_hash: str, max_wait: int = 300) -> dict:
-        waited = 0
-        while waited < max_wait:
-            try:
-                receipt = await self._call_rpc("gen_getTransactionReceipt", [tx_hash])
-                if receipt and receipt.get("status"):
-                    return receipt
-            except Exception:
-                pass
-            await asyncio.sleep(5)
-            waited += 5
-        logger.warning("Receipt timeout for tx: %s", tx_hash)
-        return {"status": "timeout", "tx_hash": tx_hash}
-
-    def _deployer_address(self) -> str:
-        if not self.private_key:
-            return "0x0000000000000000000000000000000000000000"
-        from eth_account import Account
-        return Account.from_key(self.private_key).address
 
     # ── Operator Management ───────────────────────────────────────────────────
 
