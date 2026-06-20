@@ -36,11 +36,17 @@ class Settings(BaseSettings):
     GENLAYER_CONTRACT_ADDRESS: str = ""
     GENLAYER_DEPLOYER_PRIVATE_KEY: str = ""
 
-    # Notifications
-    RESEND_API_KEY: str = ""
-    RESEND_FROM_EMAIL: str = "alerts@slashsure.io"
+    # Brevo (email)
+    BREVO_API_KEY: str = ""
+    BREVO_SENDER_EMAIL: str = "preciousmofeoluwa@gmail.com"
+    BREVO_SENDER_NAME: str = "SlashSure"
+
+    # Slack
     SLACK_BOT_TOKEN: str = ""
     SLACK_DEFAULT_CHANNEL: str = "#slashsure-alerts"
+
+    # Frontend URL (for email links)
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Network RPCs
     ETHEREUM_RPC_URL: str = ""

@@ -30,6 +30,10 @@ class User(Base):
     is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False)
     email_verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_verification_token: Mapped[str] = mapped_column(String(128), nullable=True, index=True)
+    email_verification_expires: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_reset_token: Mapped[str] = mapped_column(String(128), nullable=True, index=True)
+    password_reset_expires: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

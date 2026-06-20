@@ -52,6 +52,14 @@ export const authApi = {
   me: () => api.get("/auth/me"),
   exportKey: (password: string) =>
     api.post("/auth/export-key", { password }),
+  verifyEmail: (token: string) =>
+    api.post("/auth/verify-email", { token }),
+  resendVerification: (email: string) =>
+    api.post("/auth/resend-verification", { email }),
+  forgotPassword: (email: string) =>
+    api.post("/auth/forgot-password", { email }),
+  resetPassword: (token: string, new_password: string) =>
+    api.post("/auth/reset-password", { token, new_password }),
 };
 
 // Operators

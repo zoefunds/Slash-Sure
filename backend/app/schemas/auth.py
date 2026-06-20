@@ -25,6 +25,7 @@ class RegisterResponse(BaseModel):
     user_id: str
     email: str
     wallet_address: str
+    message: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -38,6 +39,7 @@ class LoginResponse(BaseModel):
     user_id: str
     email: str
     wallet_address: str | None
+    is_verified: bool = False
 
 
 class RefreshRequest(BaseModel):

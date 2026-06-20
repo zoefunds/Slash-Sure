@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -10,28 +11,52 @@ from slowapi.util import get_remote_address
 
 from app.core.config import settings
 from app.api.v1.routes import auth, operators, incidents, slashing, insurance, monitoring, risk
+from app.api.v1.routes.genlayer import router as genlayer_router
 from app.api.v1.ws.events import router as ws_router
 from app.db.base import engine, Base
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Starting SlashSure API v{settings.VERSION}")
-    # Create DB tables on startup (production: use Alembic migrations)
+    logger.info("Starting SlashSure API v%s", settings.VERSION)
+
+    # DB tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables verified")
+
+    # Redis
+    from app.core.redis import get_redis
+    await get_redis()
+
+    # Monitoring worker
+    from app.workers.monitoring_worker import run_monitoring_worker
+    worker_task = asyncio.create_task(run_monitoring_worker())
+    logger.info("Monitoring worker started")
+
     yield
-    logger.info("Shutting down SlashSure API")
+
+    # Shutdown
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
     from app.services.genlayer.client import genlayer_client
     await genlayer_client.close()
+
+    from app.core.redis import close_redis
+    await close_redis()
+
+    logger.info("SlashSure API shut down cleanly")
 
 
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="SlashSure API",
-    description="AI-powered slashing monitoring and insurance layer for decentralized networks",
+    description="AI-powered slashing monitoring and insurance layer for decentralised networks",
     version=settings.VERSION,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -53,36 +78,44 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_logger(request: Request, call_next):
-    logger.info(f"{request.method} {request.url.path}")
+    logger.debug("%s %s", request.method, request.url.path)
     response = await call_next(request)
     return response
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.VERSION, "env": settings.APP_ENV}
-
-
-@app.get("/api/v1/contract/stats")
-async def contract_stats():
-    from app.services.genlayer.client import genlayer_client
-    stats = await genlayer_client.get_contract_stats()
-    return {"stats": stats}
+    from app.core.redis import get_redis
+    redis_ok = False
+    try:
+        r = await get_redis()
+        await r.ping()
+        redis_ok = True
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "version": settings.VERSION,
+        "env": settings.APP_ENV,
+        "redis": redis_ok,
+        "contract": "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d",
+    }
 
 
 # Register routers
 prefix = "/api/v1"
-app.include_router(auth.router, prefix=prefix)
-app.include_router(operators.router, prefix=prefix)
-app.include_router(incidents.router, prefix=prefix)
-app.include_router(slashing.router, prefix=prefix)
-app.include_router(insurance.router, prefix=prefix)
-app.include_router(monitoring.router, prefix=prefix)
-app.include_router(risk.router, prefix=prefix)
+app.include_router(auth.router,        prefix=prefix)
+app.include_router(operators.router,   prefix=prefix)
+app.include_router(incidents.router,   prefix=prefix)
+app.include_router(slashing.router,    prefix=prefix)
+app.include_router(insurance.router,   prefix=prefix)
+app.include_router(monitoring.router,  prefix=prefix)
+app.include_router(risk.router,        prefix=prefix)
+app.include_router(genlayer_router,    prefix=prefix)
 app.include_router(ws_router)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.error("Unhandled exception: %s", exc, exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
