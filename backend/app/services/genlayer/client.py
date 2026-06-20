@@ -27,7 +27,9 @@ def _get_sdk_client():
     if _sdk_client is None:
         from genlayer_py.chains.studionet import studionet
         from genlayer_py.client.genlayer_client import GenLayerClient as SDKClient
-        _sdk_client = SDKClient(chain_config=studionet)
+        # Must pass account= so read_contract can use self.local_account (genlayer-py bug:
+        # read_contract ignores the per-call `account` param and always reads self.local_account)
+        _sdk_client = SDKClient(chain_config=studionet, account=_fallback_account())
     return _sdk_client
 
 
@@ -92,7 +94,7 @@ class GenLayerClient:
                 None,   # kwargs
             )
             tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
-            logger.info("GenLayer tx sent: %s → %s", function_name, tx_hash_str)
+            logger.info(f"GenLayer tx sent: {function_name} → {tx_hash_str}")
             return {"tx_hash": tx_hash_str, "status": "pending"}
         except Exception as exc:
             logger.error("GenLayer tx failed: %s — %s", function_name, exc)
