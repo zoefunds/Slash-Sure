@@ -172,6 +172,23 @@ class GenLayerClient:
             return []
         return [x for x in str(raw).split(",") if x]
 
+    async def get_operator_reputation(self, address: str) -> Optional[dict]:
+        """Return reputation scores stored inside the operator object."""
+        op = await self.call_view("get_operator", [address])
+        if not op:
+            return None
+        if isinstance(op, str):
+            import json as _json
+            try:
+                op = _json.loads(op)
+            except Exception:
+                return None
+        keys = ["reliability_score", "security_score", "slashing_risk_score",
+                "insurance_premium_score", "reputation_score"]
+        if not any(op.get(k) for k in keys):
+            return None
+        return {k: op.get(k) for k in keys}
+
     # ── Evidence ──────────────────────────────────────────────────────────────
 
     async def submit_evidence(
