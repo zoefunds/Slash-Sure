@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(222 47% 5%);
+  --color-foreground: hsl(210 40% 95%);
+  --color-card: hsl(222 47% 8%);
+  --color-card-foreground: hsl(210 40% 95%);
+  --color-popover: hsl(222 47% 8%);
+  --color-popover-foreground: hsl(210 40% 95%);
+  --color-primary: hsl(210 100% 56%);
+  --color-primary-foreground: hsl(222 47% 5%);
+  --color-secondary: hsl(222 47% 12%);
+  --color-secondary-foreground: hsl(210 40% 95%);
+  --color-muted: hsl(222 47% 12%);
+  --color-muted-foreground: hsl(215 20% 55%);
+  --color-accent: hsl(210 100% 56%);
+  --color-accent-foreground: hsl(222 47% 5%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(222 47% 14%);
+  --color-input: hsl(222 47% 12%);
+  --color-ring: hsl(210 100% 56%);
+  --radius: 0.5rem;
+
+  /* SlashSure brand colors */
+  --color-slash-blue: #388bfd;
+  --color-slash-red: #ef4444;
+  --color-slash-green: #22c55e;
+  --color-slash-yellow: #f59e0b;
+  --color-slash-purple: #a855f7;
+  --color-slash-cyan: #06b6d4;
+  --color-slash-dark: #060d1a;
+
+  /* Animations */
+  --animate-fade-in: fadeIn 0.5s ease-in-out;
+  --animate-slide-up: slideUp 0.5s ease-out;
+  --animate-pulse-glow: pulseGlow 2s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes borderSpin {
+    from { rotate: 0deg; }
+    to { rotate: 360deg; }
+  }
+}
+
+/* Base styles */
+*, *::before, *::after {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted-foreground); }
+
+/* Utility classes */
+.glow-blue { box-shadow: 0 0 20px rgba(56, 139, 253, 0.35); }
+.glow-red  { box-shadow: 0 0 20px rgba(239, 68, 68, 0.35); }
+
+.gradient-text {
+  background: linear-gradient(to right, #60a5fa, #22d3ee, #3b82f6);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(56, 139, 253, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 139, 253, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.bg-hero-gradient {
+  background: radial-gradient(ellipse at 50% 0%, rgba(56,139,253,0.15) 0%, transparent 60%);
+}
+
+.bg-card-gradient {
+  background: linear-gradient(135deg, rgba(56,139,253,0.05) 0%, rgba(6,182,212,0.03) 100%);
+}
+
+.shadow-glow-blue { box-shadow: 0 0 20px rgba(56, 139, 253, 0.35); }
+.shadow-glow-red   { box-shadow: 0 0 20px rgba(239, 68, 68, 0.35); }
+.shadow-glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.35); }
+.shadow-card       { box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+.shadow-card-hover { box-shadow: 0 8px 40px rgba(56,139,253,0.15); }
+
+.animate-fade-in  { animation: fadeIn 0.5s ease-in-out; }
+.animate-slide-up { animation: slideUp 0.5s ease-out; }
+.animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+.animate-float { animation: float 6s ease-in-out infinite; }
