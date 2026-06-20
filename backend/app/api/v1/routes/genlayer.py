@@ -3,6 +3,8 @@ GenLayer on-chain read/write routes.
 Exposes contract state to the frontend without going through GenLayer RPC directly.
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -20,10 +22,14 @@ CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d"
 
 @router.get("/stats")
 async def get_contract_stats(current_user: User = Depends(get_current_user)):
-    stats = await genlayer_client.get_stats()
+    try:
+        stats = await asyncio.wait_for(genlayer_client.get_stats(), timeout=15.0)
+    except asyncio.TimeoutError:
+        stats = None
     return {
         "contract_address": CONTRACT_ADDRESS,
         "network": "StudioNet",
+        "reachable": stats is not None,
         **(stats or {}),
     }
 

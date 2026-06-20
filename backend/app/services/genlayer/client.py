@@ -23,7 +23,7 @@ class GenLayerClient:
         self.rpc_url          = settings.GENLAYER_RPC_URL
         self.contract_address = settings.GENLAYER_CONTRACT_ADDRESS or CONTRACT_ADDRESS
         self.private_key      = settings.GENLAYER_DEPLOYER_PRIVATE_KEY
-        self._http            = httpx.AsyncClient(timeout=180.0)
+        self._http            = httpx.AsyncClient(timeout=30.0)
 
     async def close(self):
         await self._http.aclose()
