@@ -65,16 +65,16 @@ export const authApi = {
 // Operators
 export const operatorsApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/operators", { params }),
-  get: (id: string) => api.get(`/operators/${id}`),
+    api.get("/operators/", { params }),
+  get: (id: string) => api.get(`/operators/${id}/`),
   create: (data: Record<string, unknown>) => api.post("/operators/", data),
 };
 
 // Incidents
 export const incidentsApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/incidents", { params }),
-  get: (id: string) => api.get(`/incidents/${id}`),
+    api.get("/incidents/", { params }),
+  get: (id: string) => api.get(`/incidents/${id}/`),
   create: (data: Record<string, unknown>) => api.post("/incidents/", data),
   addEvidence: (id: string, data: Record<string, unknown>) =>
     api.post(`/incidents/${id}/evidence`, data),
@@ -83,8 +83,8 @@ export const incidentsApi = {
 // Slashing
 export const slashingApi = {
   list: (params?: Record<string, unknown>) =>
-    api.get("/slashing", { params }),
-  get: (id: string) => api.get(`/slashing/${id}`),
+    api.get("/slashing/", { params }),
+  get: (id: string) => api.get(`/slashing/${id}/`),
   create: (data: Record<string, unknown>) => api.post("/slashing/", data),
   approve: (id: string, data: { approved: boolean; reason?: string }) =>
     api.post(`/slashing/${id}/approve/`, data),
