@@ -12,7 +12,7 @@ _engine_kwargs: dict = dict(
 )
 # On Fly.io the internal Postgres uses no SSL; asyncpg needs ssl passed as connect_arg
 if settings.db_ssl_disabled:
-    _engine_kwargs["connect_args"] = {"ssl": None}
+    _engine_kwargs["connect_args"] = {"ssl": False}
 
 engine = create_async_engine(settings.async_database_url, **_engine_kwargs)
 
