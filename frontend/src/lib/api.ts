@@ -67,7 +67,7 @@ export const operatorsApi = {
   list: (params?: Record<string, unknown>) =>
     api.get("/operators", { params }),
   get: (id: string) => api.get(`/operators/${id}`),
-  create: (data: Record<string, unknown>) => api.post("/operators", data),
+  create: (data: Record<string, unknown>) => api.post("/operators/", data),
 };
 
 // Incidents
@@ -75,7 +75,7 @@ export const incidentsApi = {
   list: (params?: Record<string, unknown>) =>
     api.get("/incidents", { params }),
   get: (id: string) => api.get(`/incidents/${id}`),
-  create: (data: Record<string, unknown>) => api.post("/incidents", data),
+  create: (data: Record<string, unknown>) => api.post("/incidents/", data),
   addEvidence: (id: string, data: Record<string, unknown>) =>
     api.post(`/incidents/${id}/evidence`, data),
 };
@@ -85,9 +85,9 @@ export const slashingApi = {
   list: (params?: Record<string, unknown>) =>
     api.get("/slashing", { params }),
   get: (id: string) => api.get(`/slashing/${id}`),
-  create: (data: Record<string, unknown>) => api.post("/slashing", data),
+  create: (data: Record<string, unknown>) => api.post("/slashing/", data),
   approve: (id: string, data: { approved: boolean; reason?: string }) =>
-    api.post(`/slashing/${id}/approve`, data),
+    api.post(`/slashing/${id}/approve/`, data),
 };
 
 // Insurance
@@ -108,7 +108,7 @@ export const monitoringApi = {
   alerts: (params?: Record<string, unknown>) =>
     api.get("/monitoring/alerts", { params }),
   acknowledgeAlert: (id: string) =>
-    api.post(`/monitoring/alerts/${id}/acknowledge`),
+    api.post(`/monitoring/alerts/${id}/acknowledge/`),
   dashboardStats: () => api.get("/monitoring/dashboard/stats"),
 };
 
