@@ -8,12 +8,20 @@ import { AlertTriangle, Plus, X, Loader2 } from "lucide-react";
 
 const NETWORKS = ["eigenlayer", "symbiotic", "babylon", "cosmos"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
+const INCIDENT_TYPES = [
+  { value: "double_sign", label: "Double Sign" },
+  { value: "downtime", label: "Downtime" },
+  { value: "protocol_violation", label: "Protocol Violation" },
+  { value: "slashing_risk", label: "Slashing Risk" },
+  { value: "stake_manipulation", label: "Stake Manipulation" },
+  { value: "other", label: "Other" },
+];
 
 function ReportIncidentModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
     title: "", network: "eigenlayer", severity: "medium",
-    operator_address: "", description: "",
+    incident_type: "protocol_violation", operator_address: "", description: "",
   });
   const [error, setError] = useState("");
 
@@ -41,6 +49,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
       title: form.title,
       network: form.network,
       severity: form.severity,
+      incident_type: form.incident_type,
       operator_address: form.operator_address || undefined,
       description: form.description || undefined,
     });
@@ -72,6 +81,17 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
               placeholder="e.g. Double-sign detected on EigenLayer"
               className={inputCls}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Incident Type *</label>
+            <select
+              value={form.incident_type}
+              onChange={(e) => setForm(f => ({ ...f, incident_type: e.target.value }))}
+              className={inputCls}
+            >
+              {INCIDENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

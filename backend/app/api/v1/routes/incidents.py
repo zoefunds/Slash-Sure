@@ -18,8 +18,8 @@ router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
 
 class IncidentCreate(BaseModel):
-    operator_address: str
-    incident_type: str
+    operator_address: Optional[str] = None
+    incident_type: str = "protocol_violation"
     network: str
     title: str
     description: Optional[str] = None
