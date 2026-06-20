@@ -15,9 +15,25 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     VERSION: str = "1.0.0"
 
-    # Database
-    DATABASE_URL: str
-    DATABASE_SYNC_URL: str
+    # Database — Fly provides postgres://, we need postgresql+asyncpg:// for async
+    DATABASE_URL: str = ""
+    DATABASE_SYNC_URL: str = ""
+
+    @property
+    def async_database_url(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
+    def sync_database_url(self) -> str:
+        url = self.DATABASE_SYNC_URL or self.DATABASE_URL
+        url = url.replace("postgresql+asyncpg://", "postgresql://")
+        url = url.replace("postgres://", "postgresql://")
+        return url
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

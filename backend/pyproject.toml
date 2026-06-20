@@ -3,7 +3,6 @@ name = "slashsure-backend"
 version = "1.0.0"
 description = "SlashSure Backend API — AI-powered slashing monitoring and insurance layer"
 authors = ["SlashSure Team"]
-python = "^3.11"
 
 [tool.poetry.dependencies]
 python = "^3.11"

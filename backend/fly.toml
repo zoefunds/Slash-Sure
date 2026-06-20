@@ -1,0 +1,39 @@
+app = "slashsure-api"
+primary_region = "iad"
+
+[build]
+
+[env]
+PORT = "8000"
+APP_NAME = "SlashSure"
+APP_ENV = "production"
+DEBUG = "false"
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = "60"
+REFRESH_TOKEN_EXPIRE_DAYS = "30"
+GENLAYER_RPC_URL = "https://studio.genlayer.com:8443/api"
+GENLAYER_CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d"
+BREVO_SENDER_NAME = "SlashSure"
+SLACK_DEFAULT_CHANNEL = "#slashsure-alerts"
+COSMOS_RPC_URL = "https://rpc.cosmos.network"
+BABYLON_RPC_URL = "https://rpc.babylonchain.io"
+BEACON_API_URL = "https://beaconcha.in/api/v1"
+RATE_LIMIT_PER_MINUTE = "60"
+
+[http_service]
+internal_port = 8000
+force_https = true
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 1
+
+[[http_service.checks]]
+grace_period = "30s"
+interval = "15s"
+method = "GET"
+path = "/health"
+timeout = "5s"
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"
