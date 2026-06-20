@@ -307,3 +307,27 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "is_verified": current_user.is_verified,
         "created_at": current_user.created_at,
     }
+
+
+class UpdateProfileBody(BaseModel):
+    full_name: Optional[str] = None
+
+
+@router.patch("/me")
+async def update_me(
+    body: UpdateProfileBody,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if body.full_name is not None:
+        current_user.full_name = body.full_name
+        db.add(current_user)
+        await db.commit()
+        await db.refresh(current_user)
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "is_verified": current_user.is_verified,
+        "created_at": current_user.created_at,
+    }

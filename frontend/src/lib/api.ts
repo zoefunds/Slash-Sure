@@ -60,6 +60,8 @@ export const authApi = {
     api.post("/auth/forgot-password", { email }),
   resetPassword: (token: string, new_password: string) =>
     api.post("/auth/reset-password", { token, new_password }),
+  updateProfile: (data: { full_name?: string }) =>
+    api.patch("/auth/me", data),
 };
 
 // Operators

@@ -1,12 +1,17 @@
 "use client";
 import { useState } from "react";
-import { Settings, Wallet, Bell, Key, Copy, Check, Save } from "lucide-react";
+import { Settings, Wallet, Bell, Key, Copy, Check, Save, Pencil, X } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { cn, truncateAddress } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { authApi } from "@/lib/api";
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(user?.full_name || "");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
   const [exportPw, setExportPw] = useState("");
   const [exportedKey, setExportedKey] = useState("");
   const [exportError, setExportError] = useState("");
@@ -19,6 +24,21 @@ export default function SettingsPage() {
     weekly_digest: false,
   });
   const [savedNotifs, setSavedNotifs] = useState(false);
+
+  const handleSaveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNameSaving(true);
+    setNameError("");
+    try {
+      const { data } = await authApi.updateProfile({ full_name: nameInput.trim() });
+      setUser({ ...user!, full_name: data.full_name });
+      setEditingName(false);
+    } catch {
+      setNameError("Failed to update name");
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   const handleExportKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +80,31 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="text-sm text-muted-foreground">Full Name</label>
-            <div className="mt-1 font-medium">{user?.full_name || "—"}</div>
+            {editingName ? (
+              <form onSubmit={handleSaveName} className="mt-1 flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-foreground/15"
+                  placeholder="Your full name"
+                />
+                <button type="submit" disabled={nameSaving} className="px-3 py-1.5 text-sm bg-foreground text-background rounded-lg disabled:opacity-50">
+                  {nameSaving ? "Saving…" : "Save"}
+                </button>
+                <button type="button" onClick={() => { setEditingName(false); setNameInput(user?.full_name || ""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+                {nameError && <span className="text-red-600 text-xs">{nameError}</span>}
+              </form>
+            ) : (
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-medium">{user?.full_name || "—"}</span>
+                <button onClick={() => { setEditingName(true); setNameInput(user?.full_name || ""); }} className="text-muted-foreground hover:text-foreground">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
