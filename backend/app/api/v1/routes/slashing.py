@@ -201,6 +201,7 @@ async def get_slashing_case(
 async def approve_slashing(
     case_id: str,
     body: SlashingApproval,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -209,13 +210,33 @@ async def approve_slashing(
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    signer_key = await get_user_private_key(str(current_user.id), db)
     if body.approved:
         case.status = SlashingStatus.APPROVED
-        tx = await genlayer_client.send_transaction("approve_slashing", [case_id], signer_private_key=signer_key)
-        case.genlayer_tx_hash = tx.get("tx_hash")
     else:
         case.status = SlashingStatus.REJECTED
-        await genlayer_client.send_transaction("reject_slashing", [case_id, body.reason or ""], signer_private_key=signer_key)
+
+    db.add(case)
+    await db.commit()
+
+    background_tasks.add_task(
+        _approve_on_chain, case_id, body.approved, body.reason or "", str(current_user.id)
+    )
 
     return {"case_id": case_id, "approved": body.approved, "status": case.status}
+
+
+async def _approve_on_chain(case_id: str, approved: bool, reason: str, user_id: str) -> None:
+    from app.db.base import AsyncSessionLocal
+    from sqlalchemy import update
+    async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db)
+        fn = "approve_slashing" if approved else "reject_slashing"
+        args = [case_id] if approved else [case_id, reason]
+        tx = await genlayer_client.send_transaction(fn, args, signer_private_key=signer_key)
+        if tx.get("tx_hash"):
+            await db.execute(
+                update(SlashingCase)
+                .where(SlashingCase.id == uuid.UUID(case_id))
+                .values(genlayer_tx_hash=tx["tx_hash"])
+            )
+            await db.commit()

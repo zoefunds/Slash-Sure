@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     WALLET_MASTER_KEY: str
 
     # GenLayer
-    GENLAYER_RPC_URL: str = "https://studio.genlayer.com:8443/api"
+    GENLAYER_RPC_URL: str = "https://studio.genlayer.com/api"
     GENLAYER_CONTRACT_ADDRESS: str = ""
     GENLAYER_DEPLOYER_PRIVATE_KEY: str = ""
 

@@ -5,7 +5,7 @@ Exposes contract state to the frontend without going through GenLayer RPC direct
 
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
@@ -152,18 +152,19 @@ class ProposalCreate(BaseModel):
 
 
 @router.post("/proposals")
-async def create_proposal(body: ProposalCreate, current_user: User = Depends(get_current_user)):
+async def create_proposal(body: ProposalCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     from app.db.base import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(str(current_user.id), db)
-    result = await genlayer_client.create_proposal(
+    background_tasks.add_task(
+        genlayer_client.create_proposal,
         target_id=body.target_id,
         proposal_type=body.proposal_type,
         description_hash=body.description_hash,
         voting_period_blocks=body.voting_period_blocks,
         signer_private_key=signer_key,
     )
-    return result
+    return {"status": "queued", "target_id": body.target_id, "proposal_type": body.proposal_type}
 
 
 class VoteBody(BaseModel):
