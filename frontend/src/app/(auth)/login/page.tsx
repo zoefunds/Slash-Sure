@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { authApi } from "@/lib/api";
 
@@ -33,61 +33,61 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 grid-bg">
-      <div className="w-full max-w-md">
-        {/* Logo */}
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 font-bold text-xl mb-6">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-              <Shield className="w-6 h-6 text-white" />
+          <Link href="/" className="inline-flex items-center gap-2 font-bold text-base mb-6">
+            <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
+              <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+                <path d="M5 0.5L9.5 3V7L5 9.5L0.5 7V3L5 0.5Z" fill="#efece4" />
+              </svg>
             </div>
-            <span className="gradient-text text-2xl">SlashSure</span>
+            <span>SlashSure</span>
           </Link>
-          <h1 className="text-2xl font-bold">Sign in to your account</h1>
-          <p className="text-muted-foreground mt-2">Monitor your decentralized infrastructure</p>
+          <h1 className="text-2xl font-bold">Sign in</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">Monitor your decentralized infrastructure</p>
         </div>
 
-        {/* Form */}
-        <div className="bg-card border border-border rounded-2xl p-8">
+        <div className="bg-card border border-border rounded-2xl p-7">
           {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="mb-5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label className="block text-sm font-medium mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 focus:border-foreground/30 transition-all text-sm"
                 placeholder="validator@protocol.io"
                 required
               />
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="text-sm font-medium">Password</label>
-                <a href="/forgot-password" className="text-xs text-blue-400 hover:underline">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <input
                   type={showPw ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pr-12"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 focus:border-foreground/30 transition-all pr-10 text-sm"
                   placeholder="••••••••"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -97,16 +97,16 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-foreground text-background disabled:opacity-50 rounded-lg font-semibold text-sm transition-opacity hover:opacity-85 flex items-center justify-center gap-2 mt-1"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-blue-400 hover:text-blue-300">
+          <p className="text-center text-sm text-muted-foreground mt-5">
+            No account?{" "}
+            <Link href="/register" className="text-foreground font-medium hover:underline">
               Create one
             </Link>
           </p>

@@ -27,34 +27,34 @@ export function formatDateTime(d: string | Date): string {
 
 export function severityColor(severity: string): string {
   switch (severity) {
-    case "critical": return "text-red-400 bg-red-400/10 border-red-400/20";
-    case "high": return "text-orange-400 bg-orange-400/10 border-orange-400/20";
-    case "medium": return "text-yellow-400 bg-yellow-400/10 border-yellow-400/20";
-    case "low": return "text-blue-400 bg-blue-400/10 border-blue-400/20";
+    case "critical": return "text-red-700 bg-red-100 border-red-200";
+    case "high": return "text-orange-700 bg-orange-100 border-orange-200";
+    case "medium": return "text-amber-700 bg-amber-100 border-amber-200";
+    case "low": return "text-blue-700 bg-blue-100 border-blue-200";
     default: return "text-muted-foreground bg-muted border-border";
   }
 }
 
 export function statusColor(status: string): string {
   switch (status) {
-    case "active": return "text-green-400 bg-green-400/10";
-    case "slashed": return "text-red-400 bg-red-400/10";
-    case "jailed": return "text-orange-400 bg-orange-400/10";
-    case "suspended": return "text-yellow-400 bg-yellow-400/10";
+    case "active": return "text-green-700 bg-green-100";
+    case "slashed": return "text-red-700 bg-red-100";
+    case "jailed": return "text-orange-700 bg-orange-100";
+    case "suspended": return "text-amber-700 bg-amber-100";
     case "inactive": return "text-muted-foreground bg-muted";
-    case "approved": return "text-green-400 bg-green-400/10";
-    case "rejected": return "text-red-400 bg-red-400/10";
-    case "pending": return "text-yellow-400 bg-yellow-400/10";
-    case "executed": return "text-purple-400 bg-purple-400/10";
+    case "approved": return "text-green-700 bg-green-100";
+    case "rejected": return "text-red-700 bg-red-100";
+    case "pending": return "text-amber-700 bg-amber-100";
+    case "executed": return "text-purple-700 bg-purple-100";
     default: return "text-muted-foreground bg-muted";
   }
 }
 
 export function scoreColor(score: number): string {
-  if (score >= 80) return "text-green-400";
-  if (score >= 60) return "text-yellow-400";
-  if (score >= 40) return "text-orange-400";
-  return "text-red-400";
+  if (score >= 80) return "text-green-700";
+  if (score >= 60) return "text-amber-700";
+  if (score >= 40) return "text-orange-700";
+  return "text-red-700";
 }
 
 export function truncateAddress(addr: string, chars = 6): string {

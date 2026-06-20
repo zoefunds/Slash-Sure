@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Shield, Eye, EyeOff, Loader2, CheckCircle, Wallet } from "lucide-react";
+import { Eye, EyeOff, Loader2, CheckCircle, Wallet } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { authApi } from "@/lib/api";
 
@@ -24,7 +24,6 @@ export default function RegisterPage() {
       const { data } = await authApi.register(form);
       setSuccess({ wallet_address: data.wallet_address });
       login(data);
-      // Redirect to dashboard after brief delay showing wallet address
       setTimeout(() => router.push("/dashboard"), 2500);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
@@ -37,104 +36,97 @@ export default function RegisterPage() {
   if (success) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-8 h-8 text-green-400" />
+        <div className="w-full max-w-sm text-center">
+          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <CheckCircle className="w-7 h-7 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-4">Account Created!</h2>
-          <p className="text-muted-foreground mb-6">
+          <h2 className="text-xl font-bold mb-3">Account Created</h2>
+          <p className="text-sm text-muted-foreground mb-5">
             Your blockchain wallet has been generated and securely associated with your account.
           </p>
-          <div className="bg-card border border-border rounded-xl p-5 text-left">
-            <div className="flex items-center gap-3 mb-2">
-              <Wallet className="w-5 h-5 text-blue-400" />
-              <span className="font-medium">Your Wallet Address</span>
+          <div className="bg-card border border-border rounded-xl p-4 text-left mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Your Wallet Address</span>
             </div>
-            <code className="text-xs text-muted-foreground break-all">
-              {success.wallet_address}
-            </code>
+            <code className="text-xs text-muted-foreground break-all">{success.wallet_address}</code>
           </div>
-          <p className="text-sm text-muted-foreground mt-4">
-            Redirecting to dashboard...
-          </p>
+          <p className="text-xs text-muted-foreground">Redirecting to dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 grid-bg">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 font-bold text-xl mb-6">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-              <Shield className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-7">
+          <Link href="/" className="inline-flex items-center gap-2 font-bold text-base mb-5">
+            <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
+              <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+                <path d="M5 0.5L9.5 3V7L5 9.5L0.5 7V3L5 0.5Z" fill="#efece4" />
+              </svg>
             </div>
-            <span className="gradient-text text-2xl">SlashSure</span>
+            <span>SlashSure</span>
           </Link>
           <h1 className="text-2xl font-bold">Create your account</h1>
-          <p className="text-muted-foreground mt-2">
-            A blockchain wallet will be automatically created for you
-          </p>
+          <p className="text-sm text-muted-foreground mt-1.5">A blockchain wallet will be automatically created</p>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-8">
+        <div className="bg-card border border-border rounded-2xl p-7">
           {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="mb-5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          {/* Wallet notice */}
-          <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
-            <Wallet className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
-            <div className="text-sm text-blue-300">
-              <strong>Auto Wallet Generation</strong>
-              <br />
+          <div className="mb-5 p-3.5 rounded-lg bg-secondary border border-border flex items-start gap-3">
+            <Wallet className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground leading-relaxed">
               A secure blockchain wallet will be created and encrypted with your password.
-              You can export your private key at any time.
-            </div>
+              You can export your private key at any time from Settings.
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Full Name</label>
+              <label className="block text-sm font-medium mb-1.5">Full Name</label>
               <input
                 type="text"
                 value={form.full_name}
                 onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                className="w-full px-4 py-3 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 transition-all text-sm"
                 placeholder="Alice Validator"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label className="block text-sm font-medium mb-1.5">Email</label>
               <input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-3 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 transition-all text-sm"
                 placeholder="validator@protocol.io"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Password</label>
+              <label className="block text-sm font-medium mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={showPw ? "text" : "password"}
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all pr-12"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 transition-all pr-10 text-sm"
                   placeholder="Min 8 chars with uppercase & number"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -144,16 +136,16 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-lg font-semibold transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-foreground text-background disabled:opacity-50 rounded-lg font-semibold text-sm hover:opacity-85 transition-opacity flex items-center justify-center gap-2 mt-1"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? "Creating account..." : "Create Account"}
             </button>
           </form>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
+          <p className="text-center text-sm text-muted-foreground mt-5">
             Already have an account?{" "}
-            <Link href="/login" className="text-blue-400 hover:text-blue-300">
+            <Link href="/login" className="text-foreground font-medium hover:underline">
               Sign in
             </Link>
           </p>
