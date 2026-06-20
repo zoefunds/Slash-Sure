@@ -3,14 +3,18 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-engine = create_async_engine(
-    settings.async_database_url,
+_engine_kwargs: dict = dict(
     echo=settings.DEBUG,
     pool_size=20,
     max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=3600,
 )
+# On Fly.io the internal Postgres uses no SSL; asyncpg needs ssl passed as connect_arg
+if settings.db_ssl_disabled:
+    _engine_kwargs["connect_args"] = {"ssl": None}
+
+engine = create_async_engine(settings.async_database_url, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

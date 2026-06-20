@@ -20,18 +20,19 @@ class Settings(BaseSettings):
     DATABASE_SYNC_URL: str = ""
 
     @property
+    def db_ssl_disabled(self) -> bool:
+        return "sslmode=disable" in self.DATABASE_URL
+
+    @property
     def async_database_url(self) -> str:
         url = self.DATABASE_URL
-        had_ssl_disable = "sslmode=disable" in url
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and "+asyncpg" not in url:
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # asyncpg does not accept sslmode — strip it, then re-add as asyncpg-native ssl=false
+        # asyncpg does not accept sslmode as a URL param — strip it entirely
+        # ssl is passed as connect_args in db/base.py
         url = url.replace("?sslmode=disable", "").replace("&sslmode=disable", "")
-        if had_ssl_disable:
-            sep = "&" if "?" in url else "?"
-            url = f"{url}{sep}ssl=false"
         return url
 
     @property
