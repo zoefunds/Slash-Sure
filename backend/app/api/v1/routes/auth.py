@@ -193,6 +193,24 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     wallet_result = await db.execute(select(Wallet).where(Wallet.user_id == user.id))
     wallet = wallet_result.scalar_one_or_none()
 
+    # Backfill master-encrypted key for pre-migration wallets so on-chain signing works
+    if wallet and not wallet.master_encrypted_private_key:
+        try:
+            from app.core.security import decrypt_private_key, encrypt_with_master
+            plain_key = decrypt_private_key(
+                wallet.encrypted_private_key,
+                wallet.encryption_salt,
+                wallet.encryption_nonce,
+                body.password,
+            )
+            master_enc = encrypt_with_master(plain_key)
+            wallet.master_encrypted_private_key = master_enc["encrypted_key"]
+            wallet.master_encryption_nonce = master_enc["nonce"]
+            db.add(wallet)
+        except Exception as exc:
+            from loguru import logger
+            logger.warning("Master key backfill failed for user %s: %s", user.id, exc)
+
     await log_action(db, str(user.id), None, "user_login", "user", str(user.id),
                      request.client.host if request.client else None)
     await db.commit()
