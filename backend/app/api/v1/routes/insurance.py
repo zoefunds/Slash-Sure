@@ -117,7 +117,7 @@ async def _submit_and_adjudicate_claim(
 
     async with AsyncSessionLocal() as db:
         try:
-            await genlayer_client.submit_insurance_claim(
+            await genlayer_client.submit_claim(
                 claim_id=claim_id,
                 organization=claimant_address,
                 incident_id=incident_id,
@@ -131,10 +131,7 @@ async def _submit_and_adjudicate_claim(
                 policy_terms="Standard SlashSure coverage policy v1.0",
                 damage_evidence=f"Claimed: {claimed_amount} GEN, Coverage: {coverage_amount} GEN",
                 negligence_score=60,
-                network_conditions="Normal",
                 claimant_history="No prior fraudulent claims",
-                coverage_amount=coverage_amount,
-                claimed_amount=claimed_amount,
             )
             await db.execute(
                 update(InsuranceClaim)

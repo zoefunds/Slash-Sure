@@ -128,7 +128,7 @@ async def get_operator(
     if not operator:
         raise HTTPException(status_code=404, detail="Operator not found")
 
-    reputation = await genlayer_client.get_operator_reputation(operator.address)
+    reputation = await genlayer_client.get_operator(operator.address)
 
     return {
         "id": str(operator.id),

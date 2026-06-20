@@ -135,14 +135,12 @@ async def _create_and_recommend_slashing(
                 network=network,
                 stake_at_risk=stake_at_risk,
             )
-            result = await genlayer_client.generate_slashing_recommendation(
+            result = await genlayer_client.generate_slash_recommendation(
                 case_id=case_id,
-                operator_address=operator_address,
                 evidence_summary=f"Violation type: {violation_type} on {network}",
                 operator_history="Obtained from monitoring records",
                 network_policy=f"{network} standard slashing policy",
-                stake_at_risk=stake_at_risk,
-                reputation=80,
+                current_reputation=80,
             )
             await db.execute(
                 update(SlashingCase)

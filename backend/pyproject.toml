@@ -31,7 +31,6 @@ aiohttp = "^3.9.5"
 python-dotenv = "^1.0.1"
 genlayer-py = "*"
 email-validator = "^2.1.1"
-resend = "^1.0.0"
 slack-sdk = "^3.27.2"
 
 [tool.poetry.dev-dependencies]

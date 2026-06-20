@@ -2,52 +2,35 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, AlertTriangle, Users, FileText, Zap, TrendingUp,
-  TrendingDown, Minus, ArrowRight, Shield, Globe
+  Activity, AlertTriangle, Users, FileText, Zap,
+  TrendingUp, TrendingDown, Minus, ArrowRight, Shield,
 } from "lucide-react";
 import Link from "next/link";
-import { monitoringApi, genlayerApi } from "@/lib/api";
-import { cn, formatNumber, formatDateTime, severityColor, statusColor } from "@/lib/utils";
+import { monitoringApi, genlayerApi, incidentsApi } from "@/lib/api";
+import { cn, formatNumber, formatDateTime, severityColor } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell,
+  PieChart, Pie, Cell,
 } from "recharts";
 
-const areaData = [
-  { time: "00:00", incidents: 2, alerts: 5 },
-  { time: "04:00", incidents: 1, alerts: 3 },
-  { time: "08:00", incidents: 5, alerts: 12 },
-  { time: "12:00", incidents: 8, alerts: 18 },
-  { time: "16:00", incidents: 4, alerts: 9 },
-  { time: "20:00", incidents: 6, alerts: 14 },
-  { time: "Now", incidents: 3, alerts: 7 },
-];
-
-const networkData = [
-  { name: "EigenLayer", value: 45, color: "#388bfd" },
-  { name: "Symbiotic", value: 28, color: "#a855f7" },
-  { name: "Babylon", value: 18, color: "#f59e0b" },
-  { name: "Cosmos", value: 9, color: "#06b6d4" },
-];
-
-const recentIncidents = [
-  { id: "1", title: "Validator downtime detected", network: "EigenLayer", severity: "high", time: "2 min ago" },
-  { id: "2", title: "Oracle price deviation", network: "Symbiotic", severity: "critical", time: "8 min ago" },
-  { id: "3", title: "Missed blocks threshold exceeded", network: "Cosmos", severity: "medium", time: "15 min ago" },
-  { id: "4", title: "Unusual withdrawal pattern", network: "Babylon", severity: "low", time: "32 min ago" },
-];
+const NETWORK_COLORS: Record<string, string> = {
+  eigenlayer: "#388bfd",
+  symbiotic: "#a855f7",
+  babylon: "#f59e0b",
+  cosmos: "#06b6d4",
+};
+const FALLBACK_COLORS = ["#388bfd", "#a855f7", "#f59e0b", "#06b6d4", "#22c55e"];
 
 function StatCard({
-  title, value, change, icon: Icon, color, href
+  title, value, change, icon: Icon, color, href,
 }: {
   title: string; value: string | number; change?: number;
   icon: React.ElementType; color: string; href?: string;
 }) {
   const TrendIcon = change === undefined ? Minus : change > 0 ? TrendingUp : TrendingDown;
   const trendColor = change === undefined ? "text-muted-foreground" : change > 0 ? "text-red-400" : "text-green-400";
-
   const content = (
-    <div className="p-6 rounded-2xl border border-border bg-card/50 hover:border-blue-500/30 hover:shadow-card-hover transition-all duration-200 group">
+    <div className="p-6 rounded-2xl border border-border bg-card/50 hover:border-blue-500/30 hover:shadow-card-hover transition-all duration-200">
       <div className="flex items-start justify-between mb-4">
         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", color)}>
           <Icon className="w-5 h-5" />
@@ -63,12 +46,7 @@ function StatCard({
       <div className="text-sm text-muted-foreground">{title}</div>
     </div>
   );
-
-  return href ? (
-    <Link href={href} className="block">{content}</Link>
-  ) : (
-    content
-  );
+  return href ? <Link href={href} className="block">{content}</Link> : content;
 }
 
 export default function DashboardPage() {
@@ -84,51 +62,72 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const { data: recentData } = useQuery({
+    queryKey: ["recent-incidents"],
+    queryFn: () => incidentsApi.list({ per_page: 5 }).then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+
+  // Build area chart from hourly_stats if available, else empty
+  const areaData: { time: string; incidents: number; alerts: number }[] =
+    stats?.hourly_stats?.map((h: { hour: string; incidents: number; alerts: number }) => ({
+      time: h.hour,
+      incidents: h.incidents,
+      alerts: h.alerts,
+    })) ?? [];
+
+  // Build pie chart from network distribution
+  const networkData: { name: string; value: number; color: string }[] =
+    stats?.network_distribution
+      ? Object.entries(stats.network_distribution).map(([name, value], i) => ({
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          value: value as number,
+          color: NETWORK_COLORS[name.toLowerCase()] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+        }))
+      : [];
+
+  const recentIncidents = recentData?.items ?? [];
+
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Security Overview</h1>
         <p className="text-muted-foreground mt-1">
-          Real-time monitoring across all networks — last updated just now
+          Real-time monitoring across all networks
         </p>
       </div>
 
-      {/* Live indicator */}
       <div className="flex items-center gap-2 text-sm text-green-400">
         <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-        Live monitoring active — all systems operational
+        Live monitoring active
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard
           title="Active Operators"
-          value={stats?.active_operators ?? "—"}
-          change={2.4}
+          value={formatNumber(stats?.active_operators ?? 0)}
           icon={Users}
           color="bg-blue-500/10 text-blue-400"
           href="/operators"
         />
         <StatCard
           title="Open Incidents"
-          value={stats?.open_incidents ?? "—"}
-          change={12}
+          value={formatNumber(stats?.open_incidents ?? 0)}
           icon={AlertTriangle}
           color="bg-red-500/10 text-red-400"
           href="/incidents"
         />
         <StatCard
           title="Pending Slashing"
-          value={stats?.pending_slashing_cases ?? "—"}
-          change={-5}
+          value={formatNumber(stats?.pending_slashing_cases ?? 0)}
           icon={Zap}
           color="bg-orange-500/10 text-orange-400"
           href="/slashing"
         />
         <StatCard
           title="Active Claims"
-          value={stats?.active_insurance_claims ?? "—"}
+          value={formatNumber(stats?.active_insurance_claims ?? 0)}
           icon={FileText}
           color="bg-purple-500/10 text-purple-400"
           href="/insurance"
@@ -144,29 +143,36 @@ export default function DashboardPage() {
               <h3 className="font-semibold">Incident Activity</h3>
               <p className="text-sm text-muted-foreground">Last 24 hours</p>
             </div>
+            <Activity className="w-4 h-4 text-muted-foreground" />
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={areaData}>
-              <defs>
-                <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#388bfd" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#388bfd" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="alertGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="time" stroke="#555" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#555" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: "#0d1526", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
-              />
-              <Area type="monotone" dataKey="incidents" stroke="#388bfd" fill="url(#incidentGrad)" strokeWidth={2} />
-              <Area type="monotone" dataKey="alerts" stroke="#ef4444" fill="url(#alertGrad)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {areaData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={areaData}>
+                <defs>
+                  <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#388bfd" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#388bfd" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="alertGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="time" stroke="#555" tick={{ fontSize: 11 }} />
+                <YAxis stroke="#555" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ background: "#0d1526", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
+                />
+                <Area type="monotone" dataKey="incidents" stroke="#388bfd" fill="url(#incidentGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="alerts" stroke="#ef4444" fill="url(#alertGrad)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[220px] flex items-center justify-center text-muted-foreground text-sm">
+              No activity data yet — monitoring worker will populate this
+            </div>
+          )}
           <div className="flex items-center gap-6 mt-4 text-sm">
             <div className="flex items-center gap-2"><span className="w-3 h-1 rounded bg-blue-400" /> Incidents</div>
             <div className="flex items-center gap-2"><span className="w-3 h-1 rounded bg-red-400" /> Alerts</div>
@@ -177,29 +183,37 @@ export default function DashboardPage() {
         <div className="p-6 rounded-2xl border border-border bg-card/50">
           <h3 className="font-semibold mb-2">Network Distribution</h3>
           <p className="text-sm text-muted-foreground mb-6">Active operators per network</p>
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={networkData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-                {networkData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
+          {networkData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={networkData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
+                    {networkData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: "#0d1526", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-4">
+                {networkData.map((n) => (
+                  <div key={n.name} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: n.color }} />
+                      {n.name}
+                    </div>
+                    <span className="text-muted-foreground">{n.value}</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{ background: "#0d1526", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-2 mt-4">
-            {networkData.map((n) => (
-              <div key={n.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: n.color }} />
-                  {n.name}
-                </div>
-                <span className="text-muted-foreground">{n.value}%</span>
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center">
+              Register operators to see network distribution
+            </div>
+          )}
         </div>
       </div>
 
@@ -212,7 +226,9 @@ export default function DashboardPage() {
           </Link>
         </div>
         <div className="divide-y divide-border">
-          {recentIncidents.map((inc) => (
+          {recentIncidents.length > 0 ? recentIncidents.map((inc: {
+            id: string; title: string; network: string; severity: string; created_at: string;
+          }) => (
             <div key={inc.id} className="flex items-center justify-between px-6 py-4 hover:bg-secondary/30 transition-colors">
               <div className="flex items-center gap-4">
                 <div className={cn("px-2 py-1 rounded text-xs font-medium border", severityColor(inc.severity))}>
@@ -223,9 +239,13 @@ export default function DashboardPage() {
                   <div className="text-xs text-muted-foreground">{inc.network}</div>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground">{inc.time}</div>
+              <div className="text-xs text-muted-foreground">{formatDateTime(inc.created_at)}</div>
             </div>
-          ))}
+          )) : (
+            <div className="px-6 py-10 text-center text-muted-foreground text-sm">
+              No incidents detected yet — monitoring worker is watching
+            </div>
+          )}
         </div>
       </div>
 
@@ -241,19 +261,19 @@ export default function DashboardPage() {
             href={`https://studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto text-xs text-muted-foreground hover:text-blue-400 transition-colors font-mono truncate max-w-[200px]"
+            className="ml-auto text-xs text-muted-foreground hover:text-blue-400 transition-colors font-mono truncate max-w-[240px]"
           >
             {process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}
           </a>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Operators", value: contractStats?.total_operators ?? stats?.total_operators ?? "—" },
+            { label: "Total Operators", value: contractStats?.total_operators ?? "—" },
             { label: "Slashing Cases", value: contractStats?.total_cases ?? "—" },
             { label: "Insurance Claims", value: contractStats?.total_claims ?? "—" },
             { label: "Audit Entries", value: contractStats?.audit_count ?? "—" },
           ].map((item) => (
-            <div key={item.label} className="text-center">
+            <div key={item.label} className="text-center p-3 rounded-xl bg-card/50 border border-border/50">
               <div className="text-2xl font-bold gradient-text">{item.value}</div>
               <div className="text-xs text-muted-foreground mt-1">{item.label}</div>
             </div>
