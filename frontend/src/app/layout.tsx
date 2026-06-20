@@ -3,7 +3,11 @@ import { Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { Providers } from "@/components/layout/Providers";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SlashSure — AI-Powered Trust & Insurance for Decentralized Networks",
@@ -23,7 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${inter.variable}`} suppressHydrationWarning>
-      <body className="min-h-screen bg-background antialiased">
+      <body className={`min-h-screen bg-background antialiased font-sans ${inter.variable}`} style={{ fontFamily: "var(--font-inter), system-ui, sans-serif" }}>
         <Providers>{children}</Providers>
       </body>
     </html>

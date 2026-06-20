@@ -4,14 +4,14 @@ import { Shield } from "lucide-react";
 const links = {
   Product: [
     { label: "Features", href: "/#features" },
-    { label: "Pricing", href: "/pricing" },
-    { label: "Documentation", href: "/docs" },
-    { label: "Changelog", href: "/changelog" },
+    { label: "How It Works", href: "/#how-it-works" },
+    { label: "Networks", href: "/#networks" },
+    { label: "Dashboard", href: "/login" },
   ],
   Company: [
-    { label: "About", href: "/about" },
-    { label: "Contact", href: "/contact" },
-    { label: "Security", href: "/security" },
+    { label: "Get Started", href: "/register" },
+    { label: "Sign In", href: "/login" },
+    { label: "GenLayer", href: "https://genlayer.com" },
   ],
   Networks: [
     { label: "EigenLayer", href: "#" },

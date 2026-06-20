@@ -11,11 +11,10 @@ import {
 import { Navbar } from "./Navbar";
 import { Footer } from "./Footer";
 
-const HERO_BG = "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=1600&q=80&auto=format";
-const NETWORK_IMG = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80&auto=format";
-const SECURITY_IMG = "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80&auto=format";
-const AI_IMG = "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=800&q=80&auto=format";
-const TEAM_IMG = "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&q=80&auto=format";
+const HERO_BG = "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=1600&q=80&fit=crop";
+const NETWORK_IMG = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80&fit=crop";
+const SECURITY_IMG = "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80&fit=crop";
+const AI_IMG = "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=800&q=80&fit=crop";
 
 const stats = [
   { label: "Operators Monitored", value: "2,400+", icon: Activity },
@@ -158,10 +157,10 @@ export function LandingPage() {
                 <ArrowRight className="w-5 h-5" />
               </Link>
               <Link
-                href="/docs"
+                href="/#features"
                 className="inline-flex items-center gap-2 px-8 py-4 border border-border hover:border-blue-500/50 hover:bg-blue-500/5 rounded-lg font-semibold transition-all duration-200"
               >
-                Read Documentation
+                See How It Works
                 <ChevronRight className="w-5 h-5" />
               </Link>
             </div>
@@ -189,7 +188,7 @@ export function LandingPage() {
       </section>
 
       {/* ── Networks ───────────────────────────────────── */}
-      <section className="py-24 px-6 border-t border-border">
+      <section id="networks" className="py-24 px-6 border-t border-border">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-sm text-blue-400 font-semibold uppercase tracking-widest mb-4">
@@ -251,7 +250,7 @@ export function LandingPage() {
       </section>
 
       {/* ── How it works ──────────────────────────────── */}
-      <section className="py-32 px-6 bg-card/20 border-y border-border">
+      <section id="how-it-works" className="py-32 px-6 bg-card/20 border-y border-border">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
@@ -448,10 +447,10 @@ export function LandingPage() {
                   <ArrowRight className="w-5 h-5" />
                 </Link>
                 <Link
-                  href="/contact"
+                  href="/login"
                   className="inline-flex items-center gap-2 px-8 py-4 border border-border hover:border-blue-500/50 rounded-lg font-semibold transition-all duration-200"
                 >
-                  Contact Sales
+                  Sign In
                 </Link>
               </div>
             </div>

@@ -24,7 +24,8 @@ export default function RegisterPage() {
       const { data } = await authApi.register(form);
       setSuccess({ wallet_address: data.wallet_address });
       login(data);
-      // Don't redirect yet — user needs to verify email first
+      // Redirect to dashboard after brief delay showing wallet address
+      setTimeout(() => router.push("/dashboard"), 2500);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
       setError(axiosErr?.response?.data?.detail || "Registration failed");
