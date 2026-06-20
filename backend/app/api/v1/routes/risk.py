@@ -64,6 +64,7 @@ async def compute_reputation(
         body.incident_count_90d, body.missed_blocks_30d, body.total_blocks_30d,
         body.oracle_accuracy_score, body.peer_review_score, body.stake_stability_score,
         operator.network,
+        str(current_user.id),
     )
 
     return {"status": "queued", "operator": body.operator_address, "message": "Reputation computation started"}
@@ -75,11 +76,14 @@ async def _compute_and_store_reputation(
     uptime_30d: int, uptime_90d: int, slash_total: int, slash_90d: int,
     incident_90d: int, missed_30d: int, total_30d: int,
     oracle_score: int, peer_score: int, stake_stability: int, network: str,
+    user_id: str = "",
 ):
     from app.db.base import AsyncSessionLocal
     from sqlalchemy import update
+    from app.services.genlayer.signer import get_user_private_key
 
     async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db) if user_id else None
         try:
             tx = await genlayer_client.compute_reputation(
                 operator_address=operator_address,
@@ -88,6 +92,7 @@ async def _compute_and_store_reputation(
                 incident_90d=incident_90d, missed_30d=missed_30d, total_30d=total_30d,
                 oracle_score=oracle_score, peer_score=peer_score,
                 stake_stability=stake_stability, network=network,
+                signer_private_key=signer_key,
             )
             # Fetch on-chain result and sync to DB
             on_chain = await genlayer_client.get_operator_reputation(operator_address)
@@ -129,6 +134,7 @@ async def predict_risk(
         body.days_since_last_incident,
         body.stake_growth_rate,
         body.delegator_change_rate,
+        str(current_user.id),
     )
 
     return {"status": "queued", "operator": body.operator_address, "message": "Risk prediction started"}
@@ -139,9 +145,12 @@ async def _predict_and_store_risk(
     perf_trend: str, infra_alerts: str, peer_comparison: str,
     market_conditions: str, historical_patterns: str,
     days_since: int, stake_growth: int, delegator_change: int,
+    user_id: str = "",
 ):
     from app.db.base import AsyncSessionLocal
+    from app.services.genlayer.signer import get_user_private_key
     async with AsyncSessionLocal() as db:
+        signer_key = await get_user_private_key(user_id, db) if user_id else None
         try:
             await genlayer_client.predict_risk(
                 operator_address=operator_address,
@@ -150,6 +159,7 @@ async def _predict_and_store_risk(
                 historical_patterns=historical_patterns,
                 days_since_incident=days_since, stake_growth_rate=stake_growth,
                 delegator_change_rate=delegator_change,
+                signer_private_key=signer_key,
             )
         except Exception as e:
             from loguru import logger
