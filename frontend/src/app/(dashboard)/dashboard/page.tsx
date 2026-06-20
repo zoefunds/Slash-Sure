@@ -6,7 +6,7 @@ import {
   TrendingDown, Minus, ArrowRight, Shield, Globe
 } from "lucide-react";
 import Link from "next/link";
-import { monitoringApi } from "@/lib/api";
+import { monitoringApi, genlayerApi } from "@/lib/api";
 import { cn, formatNumber, formatDateTime, severityColor, statusColor } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -76,6 +76,12 @@ export default function DashboardPage() {
     queryKey: ["dashboard-stats"],
     queryFn: () => monitoringApi.dashboardStats().then((r) => r.data),
     refetchInterval: 30_000,
+  });
+
+  const { data: contractStats } = useQuery({
+    queryKey: ["genlayer-contract-stats"],
+    queryFn: () => genlayerApi.getContractStats().then((r) => r.data),
+    refetchInterval: 60_000,
   });
 
   return (
@@ -231,13 +237,21 @@ export default function DashboardPage() {
           <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
             StudioNet Live
           </span>
+          <a
+            href={`https://studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-xs text-muted-foreground hover:text-blue-400 transition-colors font-mono truncate max-w-[200px]"
+          >
+            {process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}
+          </a>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Operators", value: stats?.total_operators ?? "—" },
-            { label: "Slashing Cases", value: "—" },
-            { label: "Insurance Claims", value: "—" },
-            { label: "Audit Entries", value: "—" },
+            { label: "Total Operators", value: contractStats?.total_operators ?? stats?.total_operators ?? "—" },
+            { label: "Slashing Cases", value: contractStats?.total_cases ?? "—" },
+            { label: "Insurance Claims", value: contractStats?.total_claims ?? "—" },
+            { label: "Audit Entries", value: contractStats?.audit_count ?? "—" },
           ].map((item) => (
             <div key={item.label} className="text-center">
               <div className="text-2xl font-bold gradient-text">{item.value}</div>

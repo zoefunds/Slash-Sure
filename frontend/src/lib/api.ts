@@ -112,3 +112,17 @@ export const riskApi = {
     api.post("/risk/predict", data),
   profile: (address: string) => api.get(`/risk/operator/${address}`),
 };
+
+// GenLayer on-chain
+export const CONTRACT_ADDRESS = "0x80DD0F48bC6cB64bbc6e2923A76cEb94F69Ce24d";
+
+export const genlayerApi = {
+  getContractStats: () => api.get("/genlayer/stats"),
+  getOperator: (address: string) => api.get(`/genlayer/operators/${address}`),
+  getVerdict: (incidentId: string) => api.get(`/genlayer/verdicts/${incidentId}`),
+  getCase: (caseId: string) => api.get(`/genlayer/cases/${caseId}`),
+  getClaim: (claimId: string) => api.get(`/genlayer/claims/${claimId}`),
+  getRiskPrediction: (address: string) => api.get(`/genlayer/risk/${address}`),
+  getAuditEntry: (index: number) => api.get(`/genlayer/audit/${index}`),
+};
+
