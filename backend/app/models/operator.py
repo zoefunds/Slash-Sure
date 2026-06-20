@@ -44,7 +44,7 @@ class Operator(Base):
     commission_rate: Mapped[float] = mapped_column(Float, default=0.0)
     uptime_percentage: Mapped[float] = mapped_column(Float, default=100.0)
     slash_count: Mapped[int] = mapped_column(Integer, default=0)
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     on_chain_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
