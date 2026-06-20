@@ -1,7 +1,9 @@
+import asyncio
+import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,8 @@ from app.models.operator import Operator, OperatorStatus
 from app.models.user import User
 from app.services.genlayer.client import genlayer_client
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/operators", tags=["Operators"])
 
@@ -82,9 +86,23 @@ async def list_operators(
     }
 
 
+async def _register_on_chain(address: str, name: str, network: str, stake: int) -> None:
+    try:
+        await asyncio.wait_for(
+            genlayer_client.register_operator(
+                address=address, name=name, network=network,
+                stake=stake, metadata_hash="",
+            ),
+            timeout=30.0,
+        )
+    except Exception as exc:
+        logger.warning("GenLayer on-chain registration skipped for %s: %s", address, exc)
+
+
 @router.post("/", status_code=201)
 async def create_operator(
     body: OperatorCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -103,15 +121,12 @@ async def create_operator(
         commission_rate=body.commission_rate,
     )
     db.add(operator)
-    await db.flush()
+    await db.commit()
+    await db.refresh(operator)
 
-    # Register on-chain
-    await genlayer_client.register_operator(
-        address=body.address,
-        name=body.name,
-        network=body.network,
-        stake=int(body.total_stake),
-        metadata_hash="",
+    # Fire-and-forget on-chain registration — don't block the response
+    background_tasks.add_task(
+        _register_on_chain, body.address, body.name, body.network, int(body.total_stake)
     )
 
     return {"id": str(operator.id), "address": operator.address, "status": "registered"}
