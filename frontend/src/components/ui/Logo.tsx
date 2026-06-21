@@ -1,0 +1,15 @@
+import { cn } from "@/lib/utils";
+
+export function LogoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("w-6 h-6", className)}
+    >
+      <polygon points="62,2 28,52 48,52 38,98 72,48 52,48" fill="#ef4444" />
+      <polygon points="58,12 36,52 52,52 42,88 66,48 50,48" fill="#1a0a0a" />
+    </svg>
+  );
+}

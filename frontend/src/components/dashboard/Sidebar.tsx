@@ -7,6 +7,7 @@ import {
   Users, BarChart3, FileText, Zap, Scale, Settings, LogOut, ChevronLeft, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoIcon } from "@/components/ui/Logo";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -54,21 +55,13 @@ export function Sidebar() {
       <div className="h-[60px] flex items-center justify-between px-4 border-b border-border">
         {!collapsed && (
           <Link href="/" className="flex items-center gap-2 font-bold text-sm">
-            <div className="w-6 h-6 bg-foreground rounded flex items-center justify-center shrink-0">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M5 0.5L9.5 3V7L5 9.5L0.5 7V3L5 0.5Z" fill="#efece4" />
-              </svg>
-            </div>
+            <LogoIcon className="w-6 h-6 shrink-0" />
             <span>SlashSure</span>
           </Link>
         )}
         {collapsed && (
           <Link href="/" className="mx-auto">
-            <div className="w-6 h-6 bg-foreground rounded flex items-center justify-center">
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M5 0.5L9.5 3V7L5 9.5L0.5 7V3L5 0.5Z" fill="#efece4" />
-              </svg>
-            </div>
+            <LogoIcon className="w-6 h-6" />
           </Link>
         )}
         <button

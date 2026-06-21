@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, CheckCircle, Wallet } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { authApi } from "@/lib/api";
+import { LogoIcon } from "@/components/ui/Logo";
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ email: "", password: "", full_name: "" });
@@ -62,11 +63,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-7">
           <Link href="/" className="inline-flex items-center gap-2 font-bold text-base mb-5">
-            <div className="w-7 h-7 bg-foreground rounded-md flex items-center justify-center">
-              <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-                <path d="M5 0.5L9.5 3V7L5 9.5L0.5 7V3L5 0.5Z" fill="#efece4" />
-              </svg>
-            </div>
+            <LogoIcon className="w-7 h-7" />
             <span>SlashSure</span>
           </Link>
           <h1 className="text-2xl font-bold">Create your account</h1>

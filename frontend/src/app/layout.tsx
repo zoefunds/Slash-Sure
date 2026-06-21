@@ -10,6 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   title: "SlashSure — AI-Powered Trust & Insurance for Decentralized Networks",
   description:
     "The AI-native slashing monitoring, risk assessment, and insurance coordination layer for validators, AVSs, oracle networks, and restaking ecosystems. Powered by GenLayer.",
