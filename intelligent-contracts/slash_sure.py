@@ -518,60 +518,49 @@ Return ONLY valid JSON, no markdown fences:
         cf    = case["confidence_score"]
         stake = case["stake_at_risk"]
 
+        # Compute slash_bps deterministically from fault_probability and severity_score
+        if cf < 60:
+            bps = 0
+        elif fp < 40:
+            bps = max(50, int(fp * 4))
+        elif fp < 66:
+            bps = 200 + int((fp - 40) * 15)
+        elif fp < 85:
+            bps = 600 + int((fp - 66) * 47)
+        else:
+            bps = 1500 + int((fp - 85) * 56)
+        # Adjust for reputation
+        if current_reputation > 85 and bps > 0:
+            bps = int(bps * 0.75)
+        bps = max(0, min(int(self.max_slash_bps), bps))
+        amt = max(0, int((bps * stake) / 10000))
+
+        # Only ask AI for confidence score (narrow, non-blocking field)
         prompt = f"""You are a senior slashing arbitrator for SlashSure.
+Rate your confidence in the following slashing recommendation.
 
-Compute a slashing recommendation for the following case.
-
-CASE:
-- Case ID: {case_id}
-- Network: {network_policy}
-- AI Fault Probability: {fp}/100
-- AI Severity Score: {sv}/100
-- AI Confidence Score: {cf}/100
-- Stake at Risk: {stake}
-- Operator Reputation: {current_reputation}/100
-
-EVIDENCE: {evidence_summary[:1000]}
-HISTORY: {operator_history[:400]}
-
-SLASHING PERCENTAGE GUIDELINES (basis points; 100 bps = 1%):
-- confidence < 60 → 0 bps, dismiss
-- fault < 40 → 50-200 bps
-- fault 40-65 → 200-600 bps
-- fault 66-84 → 600-1500 bps
-- fault >= 85 → 1500-10000 bps
-- Repeat offender: multiply by 1.5
-- First offense + reputation > 85: reduce by 25%
-
-slash_amount = floor(slash_bps * stake / 10000)
+CASE: {case_id} | Fault: {fp}/100 | Severity: {sv}/100 | Network: {network_policy}
+EVIDENCE: {evidence_summary[:500]}
 
 Return ONLY valid JSON, no markdown fences:
-{{"slash_bps": <0-10000>, "slash_amount": <integer>, "confidence": <0-100>}}"""
+{{"confidence": <0-100>}}"""
 
         def nondet() -> str:
             res = gl.nondet.exec_prompt(prompt)
             res = res.replace("```json", "").replace("```", "").strip()
             data = json.loads(res)
-            bps  = max(0, min(10000, int(data["slash_bps"])))
-            amt  = max(0, int((bps * stake) / 10000))
             conf = max(0, min(100, int(data["confidence"])))
-            return json.dumps({"slash_bps": bps, "slash_amount": amt, "confidence": conf})
+            return json.dumps({"confidence": conf})
 
         raw = gl.eq_principle.prompt_comparative(
             nondet,
-            principle="slash_bps within 200, slash_amount within 5% proportionally, "
-                      "confidence within 20"
+            principle="confidence within 30"
         )
 
         try:
-            data = json.loads(raw)
-            bps  = max(0, min(int(self.max_slash_bps), int(data.get("slash_bps", 0))))
-            amt  = max(0, int((bps * stake) / 10000))
-            conf = self._safe_int(data, "confidence", 50)
+            conf = self._safe_int(json.loads(raw), "confidence", 50)
         except Exception:
-            bps  = max(0, int(sv * 30))
-            amt  = int((bps * stake) / 10000)
-            conf = 40
+            conf = 50
 
         rec_hash = self._hash({"case_id": case_id, "slash_bps": bps, "slash_amount": amt})
         case["slash_bps"]      = bps
