@@ -56,43 +56,60 @@ async def _run_sync(fn, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
 
 
-async def wait_for_finalization(tx_hash: str, poll_interval: int = 5, timeout: int = 300) -> str:
+async def poll_until_finalized(tx_hash: str, label: str) -> bool:
     """
-    Poll eth_getTransactionReceipt until the tx lands.
-    Returns:
-      "confirmed"     — status 0x1 (success)
-      "undetermined"  — status 0x0 (consensus failure / UNDETERMINED)
-      "timeout"       — no receipt within `timeout` seconds
-    Never returns early on 0x0 — that would mis-classify a pending tx as failed.
-    The receipt only appears after the chain has made a final decision.
+    Poll gen_getTransactionByHash every 6 seconds until status_name == FINALIZED.
+
+    GenLayer transaction statuses (from SDK TransactionStatus enum):
+      PENDING / PROPOSING / COMMITTING / REVEALING  →  still in progress, keep polling
+      ACCEPTED   →  NOT finalized yet — do NOT trigger next tx here
+      FINALIZED  →  consensus complete and permanent — safe to trigger next tx
+      UNDETERMINED / CANCELED / *_TIMEOUT  →  consensus failed, return False to retry
+
+    Returns True ONLY on FINALIZED. Returns False on failure states or 10-min timeout.
     """
-    deadline = asyncio.get_event_loop().time() + timeout
-    async with httpx.AsyncClient(timeout=15) as client:
-        while asyncio.get_event_loop().time() < deadline:
-            try:
-                resp = await client.post(GENLAYER_RPC, json={
+    TERMINAL_FAIL = {"UNDETERMINED", "CANCELED", "VALIDATORS_TIMEOUT", "LEADER_TIMEOUT"}
+    MAX_POLLS = 100  # 100 × 6s = 10 minutes
+
+    for attempt in range(MAX_POLLS):
+        await asyncio.sleep(6)
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                resp = await c.post(GENLAYER_RPC, json={
                     "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_getTransactionReceipt",
+                    "method": "gen_getTransactionByHash",
                     "params": [tx_hash],
                 })
-                data = resp.json()
-                receipt = data.get("result")
-                if receipt:
-                    status = receipt.get("status")
-                    if status == "0x1":
-                        logger.info(f"Tx confirmed: {tx_hash}")
-                        return "confirmed"
-                    if status == "0x0":
-                        # Receipt exists with 0x0 = chain finalised with UNDETERMINED/failure
-                        logger.warning(f"Tx UNDETERMINED (0x0): {tx_hash}")
-                        return "undetermined"
-                    # Any other non-null status — keep polling
-                # receipt is None = still pending, keep polling
-            except Exception as exc:
-                logger.warning(f"Receipt poll error for {tx_hash}: {exc}")
-            await asyncio.sleep(poll_interval)
-    logger.warning(f"Tx finalization timeout: {tx_hash}")
-    return "timeout"
+                tx = resp.json().get("result")
+                if tx is None:
+                    logger.info(f"[{label}] {tx_hash[:16]}… not found yet (attempt {attempt+1})")
+                    continue
+
+                status = (tx.get("status_name") or tx.get("statusName") or "").upper()
+                # Fallback: decode numeric status
+                if not status and tx.get("status") is not None:
+                    num = str(tx["status"])
+                    mapping = {"5": "ACCEPTED", "6": "UNDETERMINED", "7": "FINALIZED",
+                               "8": "CANCELED", "12": "VALIDATORS_TIMEOUT", "13": "LEADER_TIMEOUT"}
+                    status = mapping.get(num, f"STATUS_{num}")
+
+                logger.info(f"[{label}] {tx_hash[:16]}… status={status} (attempt {attempt+1})")
+
+                if status == "FINALIZED":
+                    logger.info(f"[{label}] {tx_hash[:16]}… FINALIZED ✓ — safe to proceed")
+                    return True
+
+                if status in TERMINAL_FAIL:
+                    logger.warning(f"[{label}] {tx_hash[:16]}… {status} — will retry tx")
+                    return False
+
+                # ACCEPTED, PENDING, PROPOSING, COMMITTING, REVEALING → keep polling
+
+        except Exception as exc:
+            logger.warning(f"[{label}] poll error (attempt {attempt+1}): {exc}")
+
+    logger.error(f"[{label}] {tx_hash[:16]}… timed out after 10 min — aborting")
+    return False
 
 
 class GenLayerClient:

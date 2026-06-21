@@ -13,7 +13,7 @@ from app.db.base import get_db
 from app.models.incident import Incident, IncidentEvidence, IncidentStatus
 from app.models.operator import Operator
 from app.models.user import User
-from app.services.genlayer.client import genlayer_client, compute_merkle_root
+from app.services.genlayer.client import genlayer_client, compute_merkle_root, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -164,45 +164,6 @@ async def create_incident(
     }
 
 
-async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
-    """
-    Block until tx_hash has a 0x1 receipt on GenLayer.
-    Returns True only on 0x1. Returns False on 0x0 (UNDETERMINED) or timeout (10 min).
-    Polls every 6 seconds. analyze_fault / adjudicate_claim / etc. must NOT be
-    called unless this returns True.
-    """
-    import httpx as _httpx
-    from loguru import logger as _log
-    RPC = "https://studio.genlayer.com/api"
-    MAX_ATTEMPTS = 100  # 100 × 6s = 10 minutes max wait
-
-    for attempt in range(MAX_ATTEMPTS):
-        await asyncio.sleep(6)
-        try:
-            async with _httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(RPC, json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_getTransactionReceipt",
-                    "params": [tx_hash],
-                })
-                receipt = r.json().get("result")
-                if receipt is None:
-                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
-                    continue
-                status = receipt.get("status")
-                if status == "0x1":
-                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
-                    return True
-                if status == "0x0":
-                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED (0x0) — will retry tx")
-                    return False
-        except Exception as exc:
-            _log.warning(f"[{label}] poll error: {exc}")
-
-    from loguru import logger as _log2
-    _log2.error(f"[{label}] {tx_hash[:16]}… timed out after 10 min — aborting")
-    return False
-
 
 async def _submit_evidence_and_analyze(
     incident_id: str,
@@ -235,7 +196,7 @@ async def _submit_evidence_and_analyze(
             if not ev.get("tx_hash"):
                 logger.error(f"submit_evidence send failed ({incident_id}): {ev}")
                 return
-            confirmed = await _poll_until_confirmed(ev["tx_hash"], "submit_evidence")
+            confirmed = await poll_until_finalized(ev["tx_hash"], "submit_evidence")
             if confirmed:
                 break
             if attempt == 2:
@@ -257,7 +218,7 @@ async def _submit_evidence_and_analyze(
             if not verdict.get("tx_hash"):
                 logger.error(f"analyze_fault send failed ({incident_id}): {verdict}")
                 return
-            confirmed = await _poll_until_confirmed(verdict["tx_hash"], "analyze_fault")
+            confirmed = await poll_until_finalized(verdict["tx_hash"], "analyze_fault")
             if confirmed:
                 break
             if attempt == 2:

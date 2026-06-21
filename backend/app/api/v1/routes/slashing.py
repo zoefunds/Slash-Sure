@@ -11,7 +11,7 @@ from app.api.v1.routes.auth import get_current_user
 from app.db.base import get_db
 from app.models.slashing import SlashingCase, SlashingStatus
 from app.models.user import User
-from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.client import genlayer_client, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/slashing", tags=["Slashing"])
@@ -116,39 +116,6 @@ async def create_slashing_case(
     return {"id": case_id_str, "case_number": case_number, "status": "pending"}
 
 
-async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
-    """
-    Block until tx_hash has a 0x1 receipt on GenLayer.
-    Returns True only on 0x1. Returns False on 0x0 or timeout (10 min).
-    """
-    import httpx as _httpx
-    from loguru import logger as _log
-    RPC = "https://studio.genlayer.com/api"
-    for attempt in range(100):  # 100 × 6s = 10 min
-        await asyncio.sleep(6)
-        try:
-            async with _httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(RPC, json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_getTransactionReceipt",
-                    "params": [tx_hash],
-                })
-                receipt = r.json().get("result")
-                if receipt is None:
-                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
-                    continue
-                if receipt.get("status") == "0x1":
-                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
-                    return True
-                if receipt.get("status") == "0x0":
-                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED")
-                    return False
-        except Exception as exc:
-            _log.warning(f"[{label}] poll error: {exc}")
-    from loguru import logger as _log2
-    _log2.error(f"[{label}] timed out waiting for {tx_hash[:16]}")
-    return False
-
 
 async def _create_and_recommend_slashing(
     case_id: str,
@@ -177,7 +144,7 @@ async def _create_and_recommend_slashing(
             if not cr.get("tx_hash"):
                 logger.error(f"create_slashing_case send failed ({case_id}): {cr}")
                 return
-            confirmed = await _poll_until_confirmed(cr["tx_hash"], "create_slashing_case")
+            confirmed = await poll_until_finalized(cr["tx_hash"], "create_slashing_case")
             if confirmed:
                 break
             if attempt == 2:
@@ -200,7 +167,7 @@ async def _create_and_recommend_slashing(
             if not result.get("tx_hash"):
                 logger.error(f"generate_slash_recommendation send failed ({case_id}): {result}")
                 return
-            confirmed = await _poll_until_confirmed(result["tx_hash"], "generate_slash_recommendation")
+            confirmed = await poll_until_finalized(result["tx_hash"], "generate_slash_recommendation")
             if confirmed:
                 break
             if attempt == 2:

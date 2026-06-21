@@ -10,7 +10,7 @@ from app.api.v1.routes.auth import get_current_user
 from app.db.base import get_db
 from app.models.insurance import InsuranceClaim, InsurancePayout, ClaimStatus
 from app.models.user import User
-from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.client import genlayer_client, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/insurance", tags=["Insurance"])
@@ -106,40 +106,6 @@ async def submit_claim(
     return {"id": claim_id, "claim_number": claim_number, "status": "submitted"}
 
 
-async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
-    """
-    Block until tx_hash has a 0x1 receipt on GenLayer.
-    Returns True only on 0x1. Returns False on 0x0 or timeout (10 min).
-    """
-    import asyncio as _asyncio
-    import httpx as _httpx
-    from loguru import logger as _log
-    RPC = "https://studio.genlayer.com/api"
-    for attempt in range(100):  # 100 × 6s = 10 min
-        await _asyncio.sleep(6)
-        try:
-            async with _httpx.AsyncClient(timeout=10) as c:
-                r = await c.post(RPC, json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_getTransactionReceipt",
-                    "params": [tx_hash],
-                })
-                receipt = r.json().get("result")
-                if receipt is None:
-                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
-                    continue
-                if receipt.get("status") == "0x1":
-                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
-                    return True
-                if receipt.get("status") == "0x0":
-                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED")
-                    return False
-        except Exception as exc:
-            _log.warning(f"[{label}] poll error: {exc}")
-    from loguru import logger as _log2
-    _log2.error(f"[{label}] timed out waiting for {tx_hash[:16]}")
-    return False
-
 
 async def _submit_and_adjudicate_claim(
     claim_id: str,
@@ -168,7 +134,7 @@ async def _submit_and_adjudicate_claim(
             if not sr.get("tx_hash"):
                 logger.error(f"submit_claim send failed ({claim_id}): {sr}")
                 return
-            confirmed = await _poll_until_confirmed(sr["tx_hash"], "submit_claim")
+            confirmed = await poll_until_finalized(sr["tx_hash"], "submit_claim")
             if confirmed:
                 break
             if attempt == 2:
@@ -192,7 +158,7 @@ async def _submit_and_adjudicate_claim(
             if not tx.get("tx_hash"):
                 logger.error(f"adjudicate_claim send failed ({claim_id}): {tx}")
                 return
-            confirmed = await _poll_until_confirmed(tx["tx_hash"], "adjudicate_claim")
+            confirmed = await poll_until_finalized(tx["tx_hash"], "adjudicate_claim")
             if confirmed:
                 break
             if attempt == 2:
