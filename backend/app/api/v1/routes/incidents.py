@@ -190,12 +190,12 @@ async def _submit_evidence_and_analyze(
                  block_number, merkle_root, evidence_count, evidence_summary_hash],
                 signer_private_key=signer_key,
             )
-            if ev_result.get("status") == "failed":
+            if ev_result.get("status") != "confirmed":
                 from loguru import logger
-                logger.error(f"submit_evidence failed for {incident_id}: {ev_result}")
+                logger.error(f"submit_evidence did not confirm for {incident_id}: {ev_result}")
                 return
 
-            # Step 2: analyze fault only after evidence tx finalized
+            # Step 2: analyze fault ONLY after submit_evidence is finalized on-chain
             verdict = await genlayer_client.send_and_wait(
                 "analyze_fault",
                 [incident_id, operator_address, violation_type, network,

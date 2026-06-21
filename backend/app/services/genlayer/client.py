@@ -56,8 +56,16 @@ async def _run_sync(fn, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
 
 
-async def wait_for_finalization(tx_hash: str, poll_interval: int = 5, timeout: int = 300) -> bool:
-    """Poll eth_getTransactionReceipt until status=0x1 or timeout. Returns True on success."""
+async def wait_for_finalization(tx_hash: str, poll_interval: int = 5, timeout: int = 300) -> str:
+    """
+    Poll eth_getTransactionReceipt until the tx lands.
+    Returns:
+      "confirmed"     — status 0x1 (success)
+      "undetermined"  — status 0x0 (consensus failure / UNDETERMINED)
+      "timeout"       — no receipt within `timeout` seconds
+    Never returns early on 0x0 — that would mis-classify a pending tx as failed.
+    The receipt only appears after the chain has made a final decision.
+    """
     deadline = asyncio.get_event_loop().time() + timeout
     async with httpx.AsyncClient(timeout=15) as client:
         while asyncio.get_event_loop().time() < deadline:
@@ -72,16 +80,19 @@ async def wait_for_finalization(tx_hash: str, poll_interval: int = 5, timeout: i
                 if receipt:
                     status = receipt.get("status")
                     if status == "0x1":
-                        logger.info(f"Tx finalized: {tx_hash}")
-                        return True
+                        logger.info(f"Tx confirmed: {tx_hash}")
+                        return "confirmed"
                     if status == "0x0":
-                        logger.warning(f"Tx failed/UNDETERMINED: {tx_hash}")
-                        return False
+                        # Receipt exists with 0x0 = chain finalised with UNDETERMINED/failure
+                        logger.warning(f"Tx UNDETERMINED (0x0): {tx_hash}")
+                        return "undetermined"
+                    # Any other non-null status — keep polling
+                # receipt is None = still pending, keep polling
             except Exception as exc:
                 logger.warning(f"Receipt poll error for {tx_hash}: {exc}")
             await asyncio.sleep(poll_interval)
     logger.warning(f"Tx finalization timeout: {tx_hash}")
-    return False
+    return "timeout"
 
 
 class GenLayerClient:
@@ -130,14 +141,16 @@ class GenLayerClient:
                 logger.info(f"GenLayer tx sent: {function_name} → {tx_hash_str} (attempt {attempt+1})")
 
                 if wait_for_receipt:
-                    success = await wait_for_finalization(tx_hash_str)
-                    if success:
+                    result = await wait_for_finalization(tx_hash_str)
+                    if result == "confirmed":
                         return {"tx_hash": tx_hash_str, "status": "confirmed"}
+                    # "undetermined" or "timeout" — retry the whole tx if attempts remain
+                    logger.warning(f"{function_name} {result} on attempt {attempt+1}, tx={tx_hash_str}")
                     if attempt < retries:
-                        logger.warning(f"Retrying {function_name} (attempt {attempt+2})")
+                        logger.info(f"Re-submitting {function_name} (attempt {attempt+2})")
                         await asyncio.sleep(3)
                         continue
-                    return {"tx_hash": tx_hash_str, "status": "undetermined"}
+                    return {"tx_hash": tx_hash_str, "status": result}
 
                 return {"tx_hash": tx_hash_str, "status": "pending"}
             except Exception as exc:

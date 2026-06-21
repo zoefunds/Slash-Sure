@@ -128,12 +128,12 @@ async def _submit_and_adjudicate_claim(
                  coverage_amount, claimed_amount],
                 signer_private_key=signer_key,
             )
-            if submit_result.get("status") == "failed":
+            if submit_result.get("status") != "confirmed":
                 from loguru import logger
-                logger.error(f"submit_claim failed: {claim_id} — {submit_result}")
+                logger.error(f"submit_claim did not confirm: {claim_id} — {submit_result}")
                 return
 
-            # Step 2: adjudicate after claim is finalized
+            # Step 2: adjudicate ONLY after submit_claim is finalized on-chain
             tx = await genlayer_client.send_and_wait(
                 "adjudicate_claim",
                 [claim_id,

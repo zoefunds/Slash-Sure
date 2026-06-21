@@ -137,12 +137,12 @@ async def _create_and_recommend_slashing(
                 [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
                 signer_private_key=signer_key,
             )
-            if create_result.get("status") == "failed":
+            if create_result.get("status") != "confirmed":
                 from loguru import logger
-                logger.error(f"create_slashing_case failed: {case_id} — {create_result}")
+                logger.error(f"create_slashing_case did not confirm: {case_id} — {create_result}")
                 return
 
-            # Step 2: generate slash recommendation after case is finalized
+            # Step 2: generate slash recommendation ONLY after create_slashing_case finalized
             result = await genlayer_client.send_and_wait(
                 "generate_slash_recommendation",
                 [case_id,
