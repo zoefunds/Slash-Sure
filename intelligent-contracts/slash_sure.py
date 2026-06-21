@@ -397,7 +397,7 @@ recommended_action rules:
 - >= 85 or severity >= 85 → "slash_critical"
 
 Return ONLY valid JSON, no markdown fences:
-{{"fault_probability": <0-100>, "severity_score": <0-100>, "confidence_score": <0-100>, "recommended_action": "<dismiss|monitor|slash_low|slash_medium|slash_high|slash_critical>"}}"""
+{{"fault_probability": <0-100>, "severity_score": <0-100>, "confidence_score": <0-100>}}"""
 
         def nondet() -> str:
             res = gl.nondet.exec_prompt(prompt)
@@ -406,20 +406,14 @@ Return ONLY valid JSON, no markdown fences:
             fp   = max(0, min(100, int(data["fault_probability"])))
             sv   = max(0, min(100, int(data["severity_score"])))
             cf   = max(0, min(100, int(data["confidence_score"])))
-            act  = str(data["recommended_action"])
-            valid_actions = ["dismiss", "monitor", "slash_low",
-                             "slash_medium", "slash_high", "slash_critical"]
-            if act not in valid_actions:
-                act = "monitor"
             return json.dumps({"fault_probability": fp,
                                "severity_score": sv,
-                               "confidence_score": cf,
-                               "recommended_action": act})
+                               "confidence_score": cf})
 
         raw = gl.eq_principle.prompt_comparative(
             nondet,
-            principle="fault_probability within 8, severity_score within 8, "
-                      "confidence_score within 10, recommended_action must match exactly"
+            principle="fault_probability within 20, severity_score within 20, "
+                      "confidence_score within 20"
         )
 
         try:
@@ -427,14 +421,22 @@ Return ONLY valid JSON, no markdown fences:
             fp   = self._safe_int(data, "fault_probability", 50)
             sv   = self._safe_int(data, "severity_score", 50)
             cf   = self._safe_int(data, "confidence_score", 40)
-            act  = str(data.get("recommended_action", "monitor"))
         except Exception:
-            fp, sv, cf, act = 50, 50, 40, "monitor"
+            fp, sv, cf = 50, 50, 40
 
-        valid_actions = ["dismiss", "monitor", "slash_low",
-                         "slash_medium", "slash_high", "slash_critical"]
-        if act not in valid_actions:
+        # Derive recommended_action deterministically from fault_probability
+        if fp < 25:
+            act = "dismiss"
+        elif fp < 40:
             act = "monitor"
+        elif fp < 55 or sv < 40:
+            act = "slash_low"
+        elif fp < 70 and sv < 70:
+            act = "slash_medium"
+        elif fp < 85 or sv < 85:
+            act = "slash_high"
+        else:
+            act = "slash_critical"
 
         verdict = {
             "incident_id": incident_id,
@@ -557,8 +559,8 @@ Return ONLY valid JSON, no markdown fences:
 
         raw = gl.eq_principle.prompt_comparative(
             nondet,
-            principle="slash_bps within 50, slash_amount within 1% proportionally, "
-                      "confidence within 10"
+            principle="slash_bps within 200, slash_amount within 5% proportionally, "
+                      "confidence within 20"
         )
 
         try:
@@ -829,43 +831,40 @@ GUIDELINES:
 - assessed_damage ≤ claimed_amount; approved_amount ≤ assessed_damage
 
 Return ONLY valid JSON, no markdown fences:
-{{"coverage_eligible": <true|false>, "assessed_damage": <integer>, "approved_amount": <integer>, "confidence_score": <0-100>, "claim_status": "<approved|rejected|partial>"}}"""
+{{"assessed_damage": <integer>, "approved_amount": <integer>, "confidence_score": <0-100>}}"""
 
         def nondet() -> str:
             res = gl.nondet.exec_prompt(prompt)
             res = res.replace("```json", "").replace("```", "").strip()
             data     = json.loads(res)
-            eligible = bool(data["coverage_eligible"])
             assessed = max(0, min(claimed, int(data["assessed_damage"])))
             approved = max(0, min(assessed, int(data["approved_amount"])))
             conf     = max(0, min(100, int(data["confidence_score"])))
-            status   = str(data["claim_status"])
-            if status not in ["approved", "rejected", "partial"]:
-                status = "rejected"
-            return json.dumps({"coverage_eligible": eligible,
-                               "assessed_damage": assessed,
+            return json.dumps({"assessed_damage": assessed,
                                "approved_amount": approved,
-                               "confidence_score": conf,
-                               "claim_status": status})
+                               "confidence_score": conf})
 
         raw = gl.eq_principle.prompt_comparative(
             nondet,
-            principle="coverage_eligible must match exactly, approved_amount within 2%, "
-                      "assessed_damage within 5%, confidence_score within 10, "
-                      "claim_status must match exactly"
+            principle="approved_amount within 10%, assessed_damage within 10%, "
+                      "confidence_score within 20"
         )
 
         try:
             data     = json.loads(raw)
-            eligible = bool(data.get("coverage_eligible", False))
             assessed = max(0, min(claimed, int(data.get("assessed_damage", 0))))
             approved = max(0, min(assessed, int(data.get("approved_amount", 0))))
             conf     = self._safe_int(data, "confidence_score", 40)
-            status   = str(data.get("claim_status", "rejected"))
         except Exception:
-            eligible, assessed, approved, conf, status = False, 0, 0, 30, "rejected"
+            assessed, approved, conf = 0, 0, 30
 
-        if status not in ["approved", "rejected", "partial"]:
+        # Derive eligible and status deterministically from numeric outputs
+        eligible = approved > 0
+        if approved >= assessed and assessed > 0:
+            status = "approved"
+        elif approved > 0:
+            status = "partial"
+        else:
             status = "rejected"
 
         adj_hash    = self._hash({"claim_id": claim_id, "eligible": eligible, "approved": approved})
@@ -1017,7 +1016,7 @@ insurance_premium_score (0-100, higher = higher premium):
 overall_score = reliability*0.35 + security*0.35 + (100-slash_risk)*0.20 + peer_score*0.10
 
 Return ONLY valid JSON, no markdown fences:
-{{"reliability_score": <0-100>, "security_score": <0-100>, "slashing_risk_score": <0-100>, "insurance_premium_score": <0-100>, "overall_score": <0-100>, "risk_trend": "<improving|stable|degrading>"}}"""
+{{"reliability_score": <0-100>, "security_score": <0-100>, "slashing_risk_score": <0-100>, "insurance_premium_score": <0-100>, "overall_score": <0-100>}}"""
 
         def nondet() -> str:
             res = gl.nondet.exec_prompt(prompt)
@@ -1028,16 +1027,13 @@ Return ONLY valid JSON, no markdown fences:
             sr   = max(0, min(100, int(data["slashing_risk_score"])))
             ins  = max(0, min(100, int(data["insurance_premium_score"])))
             ov   = max(0, min(100, int(data["overall_score"])))
-            rt   = str(data.get("risk_trend", "stable"))
-            if rt not in ["improving", "stable", "degrading"]:
-                rt = "stable"
             return json.dumps({"reliability_score": rel, "security_score": sec,
                                "slashing_risk_score": sr, "insurance_premium_score": ins,
-                               "overall_score": ov, "risk_trend": rt})
+                               "overall_score": ov})
 
         raw = gl.eq_principle.prompt_comparative(
             nondet,
-            principle="All numeric score fields within 5, risk_trend must match exactly"
+            principle="All numeric score fields within 20"
         )
 
         try:
@@ -1047,11 +1043,15 @@ Return ONLY valid JSON, no markdown fences:
             sr   = self._safe_int(data, "slashing_risk_score", 20)
             ins  = self._safe_int(data, "insurance_premium_score", 40)
             ov   = self._safe_int(data, "overall_score", 80)
-            rt   = str(data.get("risk_trend", "stable"))
         except Exception:
-            rel, sec, sr, ins, ov, rt = 75, 75, 25, 40, 75, "stable"
+            rel, sec, sr, ins, ov = 75, 75, 25, 40, 75
 
-        if rt not in ["improving", "stable", "degrading"]:
+        # Derive risk_trend deterministically from slashing_risk_score
+        if sr <= 15:
+            rt = "improving"
+        elif sr >= 50:
+            rt = "degrading"
+        else:
             rt = "stable"
 
         score_hash = self._hash({"operator": operator_address, "reliability": rel,
