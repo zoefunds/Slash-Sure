@@ -128,7 +128,9 @@ async def get_dashboard_stats(
         select(func.count()).select_from(Operator).where(Operator.status == "active")
     )).scalar()
     open_incidents = (await db.execute(
-        select(func.count()).select_from(Incident).where(Incident.status == "open")
+        select(func.count()).select_from(Incident).where(
+            Incident.status.in_(["open", "ai_review", "under_review"])
+        )
     )).scalar()
     pending_slashing = (await db.execute(
         select(func.count()).select_from(SlashingCase).where(SlashingCase.status == "pending")
@@ -142,6 +144,34 @@ async def get_dashboard_stats(
         select(func.count()).select_from(Alert).where(Alert.is_acknowledged == False)
     )).scalar()
 
+    # Network distribution: count active operators per network
+    from sqlalchemy import text as sa_text
+    net_rows = (await db.execute(
+        select(Operator.network, func.count().label("cnt"))
+        .where(Operator.status == "active")
+        .group_by(Operator.network)
+    )).all()
+    network_distribution = {row.network: row.cnt for row in net_rows}
+
+    # Hourly incident counts for last 24 hours (simplified: return empty list if no events)
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    hourly_stats = []
+    for h in range(23, -1, -1):
+        bucket_start = now - timedelta(hours=h + 1)
+        bucket_end = now - timedelta(hours=h)
+        inc_count = (await db.execute(
+            select(func.count()).select_from(Incident).where(
+                Incident.detected_at >= bucket_start,
+                Incident.detected_at < bucket_end,
+            )
+        )).scalar()
+        hourly_stats.append({
+            "hour": bucket_start.strftime("%H:%M"),
+            "incidents": inc_count,
+            "alerts": 0,
+        })
+
     return {
         "total_operators": total_operators,
         "active_operators": active_operators,
@@ -149,4 +179,6 @@ async def get_dashboard_stats(
         "pending_slashing_cases": pending_slashing,
         "active_insurance_claims": active_claims,
         "unacknowledged_alerts": unacknowledged_alerts,
+        "network_distribution": network_distribution,
+        "hourly_stats": hourly_stats,
     }
