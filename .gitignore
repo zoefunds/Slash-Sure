@@ -39,6 +39,9 @@ Thumbs.db
 .idea/
 *.swp
 
+# Claude Code
+.claude/
+
 # Secrets
 *.pem
 *.key
@@ -52,3 +55,4 @@ logs/
 # DB
 *.sqlite
 *.db
+.vercel
