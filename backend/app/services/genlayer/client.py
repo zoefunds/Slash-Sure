@@ -77,7 +77,7 @@ async def poll_until_finalized(tx_hash: str, label: str) -> bool:
             async with httpx.AsyncClient(timeout=15) as c:
                 resp = await c.post(GENLAYER_RPC, json={
                     "jsonrpc": "2.0", "id": 1,
-                    "method": "gen_getTransactionByHash",
+                    "method": "eth_getTransactionByHash",
                     "params": [tx_hash],
                 })
                 tx = resp.json().get("result")
@@ -85,13 +85,8 @@ async def poll_until_finalized(tx_hash: str, label: str) -> bool:
                     logger.info(f"[{label}] {tx_hash[:16]}… not found yet (attempt {attempt+1})")
                     continue
 
-                status = (tx.get("status_name") or tx.get("statusName") or "").upper()
-                # Fallback: decode numeric status
-                if not status and tx.get("status") is not None:
-                    num = str(tx["status"])
-                    mapping = {"5": "ACCEPTED", "6": "UNDETERMINED", "7": "FINALIZED",
-                               "8": "CANCELED", "12": "VALIDATORS_TIMEOUT", "13": "LEADER_TIMEOUT"}
-                    status = mapping.get(num, f"STATUS_{num}")
+                # StudioNet returns status as a plain string e.g. "FINALIZED", "ACCEPTED"
+                status = str(tx.get("status") or "").upper()
 
                 logger.info(f"[{label}] {tx_hash[:16]}… status={status} (attempt {attempt+1})")
 
