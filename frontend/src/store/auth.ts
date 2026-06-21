@@ -7,6 +7,7 @@ interface User {
   email: string;
   full_name?: string;
   wallet_address?: string;
+  is_superadmin?: boolean;
 }
 
 interface AuthState {

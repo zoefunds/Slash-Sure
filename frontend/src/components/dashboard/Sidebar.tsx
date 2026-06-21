@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Activity, AlertTriangle,
-  Users, BarChart3, FileText, Zap, Scale, Settings, LogOut, ChevronLeft,
+  Users, BarChart3, FileText, Zap, Scale, Settings, LogOut, ChevronLeft, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { authApi } from "@/lib/api";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -28,6 +30,13 @@ export function Sidebar() {
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => authApi.me().then((r) => r.data),
+    staleTime: 60_000,
+  });
+  const isSuperadmin = me?.is_superadmin ?? false;
 
   const handleLogout = () => {
     logout();
@@ -90,6 +99,20 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {isSuperadmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100",
+              pathname === "/admin" || pathname.startsWith("/admin/")
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            )}
+          >
+            <Shield className="w-4 h-4 shrink-0" />
+            {!collapsed && <span>Admin</span>}
+          </Link>
+        )}
       </nav>
 
       {/* Logout */}

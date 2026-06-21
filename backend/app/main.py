@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.core.config import settings
-from app.api.v1.routes import auth, operators, incidents, slashing, insurance, monitoring, risk
+from app.api.v1.routes import auth, operators, incidents, slashing, insurance, monitoring, risk, admin
 from app.api.v1.routes.genlayer import router as genlayer_router
 from app.api.v1.ws.events import router as ws_router
 from app.db.base import engine, Base
@@ -97,7 +97,7 @@ async def health():
         "version": settings.VERSION,
         "env": settings.APP_ENV,
         "redis": redis_ok,
-        "contract": "0x9A91eBfC28832E70c541De5EF46BE99714691922",
+        "contract": settings.GENLAYER_CONTRACT_ADDRESS,
     }
 
 
@@ -111,6 +111,7 @@ app.include_router(insurance.router,   prefix=prefix)
 app.include_router(monitoring.router,  prefix=prefix)
 app.include_router(risk.router,        prefix=prefix)
 app.include_router(genlayer_router,    prefix=prefix)
+app.include_router(admin.router,       prefix=prefix)
 app.include_router(ws_router)
 
 

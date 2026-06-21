@@ -327,6 +327,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "full_name": current_user.full_name,
         "is_verified": current_user.is_verified,
+        "is_superadmin": current_user.is_superadmin,
         "created_at": current_user.created_at,
     }
 

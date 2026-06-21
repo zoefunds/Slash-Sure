@@ -64,6 +64,11 @@ export const authApi = {
     api.patch("/auth/me", data),
 };
 
+// Admin
+export const adminApi = {
+  listUsers: (params?: Record<string, unknown>) => api.get("/admin/users", { params }),
+};
+
 // Operators
 export const operatorsApi = {
   list: (params?: Record<string, unknown>) =>

@@ -92,6 +92,10 @@ async def _register_on_chain(address: str, name: str, network: str, stake: int, 
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
     try:
+        already = await genlayer_client.call_view("operator_exists", [address])
+        if already:
+            logger.info("Operator %s already registered on-chain, skipping", address)
+            return
         await asyncio.wait_for(
             genlayer_client.register_operator(
                 address=address, name=name, network=network,

@@ -17,7 +17,7 @@ function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) 
 }
 
 export default function RiskScoresPage() {
-  const { data: operatorsData } = useQuery({
+  const { data: operatorsData, isLoading: operatorsLoading } = useQuery({
     queryKey: ["operators"],
     queryFn: () => operatorsApi.list({ per_page: 50 }).then((r) => r.data),
     refetchInterval: 10_000,
@@ -107,10 +107,12 @@ export default function RiskScoresPage() {
           <span className="ml-auto text-xs text-muted-foreground">{operators.length} operators</span>
         </div>
 
-        {isLoading || operators.length === 0 ? (
+        {operatorsLoading || isLoading ? (
           <div className="px-5 py-16 text-center text-muted-foreground text-sm">
-            {operators.length === 0 ? "No operators registered yet" : "Computing risk scores…"}
+            {operatorsLoading ? "Loading operators…" : "Computing risk scores…"}
           </div>
+        ) : operators.length === 0 ? (
+          <div className="px-5 py-16 text-center text-muted-foreground text-sm">No operators registered yet</div>
         ) : (
           <div className="divide-y divide-border">
             {enriched.map((op) => {

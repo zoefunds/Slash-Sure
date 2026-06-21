@@ -12,7 +12,7 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = "60"
 REFRESH_TOKEN_EXPIRE_DAYS = "30"
 GENLAYER_RPC_URL = "https://studio.genlayer.com/api"
-GENLAYER_CONTRACT_ADDRESS = "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86"
+GENLAYER_CONTRACT_ADDRESS = "0x9A91eBfC28832E70c541De5EF46BE99714691922"
 BREVO_SENDER_NAME = "SlashSure"
 SLACK_DEFAULT_CHANNEL = "#slashsure-alerts"
 COSMOS_RPC_URL = "https://rpc.cosmos.network"
@@ -23,7 +23,7 @@ RATE_LIMIT_PER_MINUTE = "60"
 [http_service]
 internal_port = 8000
 force_https = true
-auto_stop_machines = "stop"
+auto_stop_machines = "off"
 auto_start_machines = true
 min_machines_running = 1
 
