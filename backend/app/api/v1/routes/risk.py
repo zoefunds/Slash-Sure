@@ -11,7 +11,7 @@ from app.db.base import get_db
 from app.models.operator import Operator
 from app.models.reputation import ReputationScore, ReputationHistory
 from app.models.user import User
-from app.services.genlayer.client import genlayer_client
+from app.services.genlayer.client import genlayer_client, poll_until_finalized
 
 router = APIRouter(prefix="/risk", tags=["Risk Intelligence"])
 
@@ -82,30 +82,45 @@ async def _compute_and_store_reputation(
     from sqlalchemy import update
     from app.services.genlayer.signer import get_user_private_key
 
+    from loguru import logger
+
+    # Fetch signer key then immediately release the DB connection
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db) if user_id else None
-        try:
-            from app.models.reputation import ReputationScore
-            # Wait for compute_reputation to finalize before reading state
-            await genlayer_client.send_and_wait(
+
+    try:
+        from app.models.reputation import ReputationScore
+        # Send compute_reputation and wait for FINALIZED before reading state
+        for attempt in range(3):
+            cr = await genlayer_client.send_transaction(
                 "compute_reputation",
                 [operator_address, uptime_30d, uptime_90d, slash_total, slash_90d,
                  incident_90d, missed_30d, total_30d, oracle_score, peer_score,
                  stake_stability, network],
                 signer_private_key=signer_key,
             )
-            # Read back on-chain reputation scores
-            on_chain = await genlayer_client.get_operator_reputation(operator_address)
+            if not cr.get("tx_hash"):
+                logger.error(f"compute_reputation send failed: {cr}")
+                return
+            confirmed = await poll_until_finalized(cr["tx_hash"], "compute_reputation")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error("compute_reputation never confirmed after 3 attempts")
+                return
+            logger.warning(f"compute_reputation attempt {attempt+1} undetermined — retrying")
 
-            # Update operator uptime
+        # Read back on-chain reputation scores
+        on_chain = await genlayer_client.get_operator_reputation(operator_address)
+
+        # Write results with a fresh DB connection
+        op_uuid = uuid.UUID(operator_db_id)
+        async with AsyncSessionLocal() as db:
             await db.execute(
                 update(Operator)
-                .where(Operator.id == uuid.UUID(operator_db_id))
+                .where(Operator.id == op_uuid)
                 .values(uptime_percentage=float(uptime_30d))
             )
-
-            # Upsert into reputation_scores
-            op_uuid = uuid.UUID(operator_db_id)
             rep_result = await db.execute(
                 select(ReputationScore).where(ReputationScore.operator_id == op_uuid)
             )
@@ -113,17 +128,14 @@ async def _compute_and_store_reputation(
             if rep is None:
                 rep = ReputationScore(operator_id=op_uuid)
                 db.add(rep)
-
             if on_chain:
-                rep.reliability_score = float(on_chain.get("reliability_score") or rep.reliability_score)
-                rep.security_score = float(on_chain.get("security_score") or rep.security_score)
-                rep.slashing_risk_score = float(on_chain.get("slashing_risk_score") or rep.slashing_risk_score)
-                rep.overall_score = float(on_chain.get("reputation_score") or rep.overall_score)
-
+                rep.reliability_score = float(on_chain.get("reliability_score") or rep.reliability_score or 0)
+                rep.security_score = float(on_chain.get("security_score") or rep.security_score or 0)
+                rep.slashing_risk_score = float(on_chain.get("slashing_risk_score") or rep.slashing_risk_score or 0)
+                rep.overall_score = float(on_chain.get("reputation_score") or rep.overall_score or 0)
             await db.commit()
-        except Exception as e:
-            from loguru import logger
-            logger.error(f"Reputation compute failed: {operator_address} — {e}")
+    except Exception as e:
+        logger.error(f"Reputation compute failed: {operator_address} — {e}")
 
 
 @router.post("/predict")

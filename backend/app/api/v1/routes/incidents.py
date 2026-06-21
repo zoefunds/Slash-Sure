@@ -182,73 +182,76 @@ async def _submit_evidence_and_analyze(
 ):
     from app.db.base import AsyncSessionLocal
     from loguru import logger
+
+    # Fetch signer key then immediately release the DB connection
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
 
-        # ── Step 1: submit_evidence ───────────────────────────────────────────
-        for attempt in range(3):
-            ev = await genlayer_client.send_transaction(
-                "submit_evidence",
-                [incident_id, operator_address, violation_type, network,
-                 block_number, merkle_root, evidence_count, evidence_summary_hash],
-                signer_private_key=signer_key,
-            )
-            if not ev.get("tx_hash"):
-                logger.error(f"submit_evidence send failed ({incident_id}): {ev}")
-                return
-            confirmed = await poll_until_finalized(ev["tx_hash"], "submit_evidence")
-            if confirmed:
-                break
-            if attempt == 2:
-                logger.error(f"submit_evidence never confirmed after 3 attempts — NOT starting analyze_fault")
-                return
-            logger.warning(f"submit_evidence attempt {attempt+1} undetermined — retrying")
+    # ── Step 1: submit_evidence ───────────────────────────────────────────
+    for attempt in range(3):
+        ev = await genlayer_client.send_transaction(
+            "submit_evidence",
+            [incident_id, operator_address, violation_type, network,
+             block_number, merkle_root, evidence_count, evidence_summary_hash],
+            signer_private_key=signer_key,
+        )
+        if not ev.get("tx_hash"):
+            logger.error(f"submit_evidence send failed ({incident_id}): {ev}")
+            return
+        confirmed = await poll_until_finalized(ev["tx_hash"], "submit_evidence")
+        if confirmed:
+            break
+        if attempt == 2:
+            logger.error(f"submit_evidence never confirmed after 3 attempts — NOT starting analyze_fault")
+            return
+        logger.warning(f"submit_evidence attempt {attempt+1} undetermined — retrying")
 
-        # ── Step 2: analyze_fault — only reaches here after submit_evidence 0x1 ──
-        logger.info(f"submit_evidence confirmed — now sending analyze_fault for {incident_id}")
-        for attempt in range(3):
-            verdict = await genlayer_client.send_transaction(
-                "analyze_fault",
-                [incident_id, operator_address, violation_type, network,
-                 evidence_summary[:2000],
-                 f"Slash count: {slash_count}, Uptime: {uptime_pct}%",
-                 stake_amount, int(uptime_pct), slash_count, 80],
-                signer_private_key=signer_key,
-            )
-            if not verdict.get("tx_hash"):
-                logger.error(f"analyze_fault send failed ({incident_id}): {verdict}")
-                return
-            confirmed = await poll_until_finalized(verdict["tx_hash"], "analyze_fault")
-            if confirmed:
-                break
-            if attempt == 2:
-                logger.error(f"analyze_fault never confirmed after 3 attempts")
-                return
-            logger.warning(f"analyze_fault attempt {attempt+1} undetermined — retrying")
+    # ── Step 2: analyze_fault — only reaches here after submit_evidence FINALIZED ──
+    logger.info(f"submit_evidence confirmed — now sending analyze_fault for {incident_id}")
+    for attempt in range(3):
+        verdict = await genlayer_client.send_transaction(
+            "analyze_fault",
+            [incident_id, operator_address, violation_type, network,
+             evidence_summary[:2000],
+             f"Slash count: {slash_count}, Uptime: {uptime_pct}%",
+             stake_amount, int(uptime_pct), slash_count, 80],
+            signer_private_key=signer_key,
+        )
+        if not verdict.get("tx_hash"):
+            logger.error(f"analyze_fault send failed ({incident_id}): {verdict}")
+            return
+        confirmed = await poll_until_finalized(verdict["tx_hash"], "analyze_fault")
+        if confirmed:
+            break
+        if attempt == 2:
+            logger.error(f"analyze_fault never confirmed after 3 attempts")
+            return
+        logger.warning(f"analyze_fault attempt {attempt+1} undetermined — retrying")
 
-        # ── Sync on-chain verdict back to DB ──────────────────────────────────
-        try:
-            from sqlalchemy import update
-            from app.models.incident import Incident
-            on_chain = await genlayer_client.call_view("get_ai_verdict", [incident_id])
-            update_vals: dict = {
-                "status": IncidentStatus.AI_REVIEW,
-                "genlayer_tx_hash": verdict.get("tx_hash"),
-            }
-            if isinstance(on_chain, dict):
-                update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
-                update_vals["ai_severity_score"] = on_chain.get("severity_score")
-                update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
-                update_vals["ai_recommended_action"] = on_chain.get("recommended_action")
-                update_vals["ai_analysis_summary"] = on_chain.get("analysis_summary") or on_chain.get("reasoning")
+    # ── Sync on-chain verdict back to DB (fresh connection) ───────────────
+    try:
+        from sqlalchemy import update
+        from app.models.incident import Incident
+        on_chain = await genlayer_client.call_view("get_ai_verdict", [incident_id])
+        update_vals: dict = {
+            "status": IncidentStatus.AI_REVIEW,
+            "genlayer_tx_hash": verdict.get("tx_hash"),
+        }
+        if isinstance(on_chain, dict):
+            update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
+            update_vals["ai_severity_score"] = on_chain.get("severity_score")
+            update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+            update_vals["ai_recommended_action"] = on_chain.get("recommended_action")
+            update_vals["ai_analysis_summary"] = on_chain.get("analysis_summary") or on_chain.get("reasoning")
+        async with AsyncSessionLocal() as db:
             await db.execute(
                 update(Incident)
                 .where(Incident.id == uuid.UUID(incident_id))
                 .values(**update_vals)
             )
             await db.commit()
-        except Exception as e:
-            logger.error(f"DB sync failed for incident {incident_id}: {e}")
+    except Exception as e:
+        logger.error(f"DB sync failed for incident {incident_id}: {e}")
 
 
 @router.get("/{incident_id}")

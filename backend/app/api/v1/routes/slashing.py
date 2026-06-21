@@ -131,71 +131,73 @@ async def _create_and_recommend_slashing(
     from app.models.slashing import SlashingCase
     from loguru import logger
 
+    # Fetch signer key then immediately release the DB connection
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
 
-        # ── Step 1: create_slashing_case ──────────────────────────────────────
-        for attempt in range(3):
-            cr = await genlayer_client.send_transaction(
-                "create_slashing_case",
-                [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
-                signer_private_key=signer_key,
-            )
-            if not cr.get("tx_hash"):
-                logger.error(f"create_slashing_case send failed ({case_id}): {cr}")
-                return
-            confirmed = await poll_until_finalized(cr["tx_hash"], "create_slashing_case")
-            if confirmed:
-                break
-            if attempt == 2:
-                logger.error(f"create_slashing_case never confirmed — NOT starting generate_slash_recommendation")
-                return
-            logger.warning(f"create_slashing_case attempt {attempt+1} undetermined — retrying")
+    # ── Step 1: create_slashing_case ──────────────────────────────────────
+    for attempt in range(3):
+        cr = await genlayer_client.send_transaction(
+            "create_slashing_case",
+            [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
+            signer_private_key=signer_key,
+        )
+        if not cr.get("tx_hash"):
+            logger.error(f"create_slashing_case send failed ({case_id}): {cr}")
+            return
+        confirmed = await poll_until_finalized(cr["tx_hash"], "create_slashing_case")
+        if confirmed:
+            break
+        if attempt == 2:
+            logger.error(f"create_slashing_case never confirmed — NOT starting generate_slash_recommendation")
+            return
+        logger.warning(f"create_slashing_case attempt {attempt+1} undetermined — retrying")
 
-        # ── Step 2: generate_slash_recommendation — only after 0x1 above ─────
-        logger.info(f"create_slashing_case confirmed — now sending generate_slash_recommendation for {case_id}")
-        for attempt in range(3):
-            result = await genlayer_client.send_transaction(
-                "generate_slash_recommendation",
-                [case_id,
-                 f"Violation type: {violation_type} on {network}",
-                 "Obtained from monitoring records",
-                 f"{network} standard slashing policy",
-                 80],
-                signer_private_key=signer_key,
-            )
-            if not result.get("tx_hash"):
-                logger.error(f"generate_slash_recommendation send failed ({case_id}): {result}")
-                return
-            confirmed = await poll_until_finalized(result["tx_hash"], "generate_slash_recommendation")
-            if confirmed:
-                break
-            if attempt == 2:
-                logger.error(f"generate_slash_recommendation never confirmed after 3 attempts")
-                return
-            logger.warning(f"generate_slash_recommendation attempt {attempt+1} undetermined — retrying")
+    # ── Step 2: generate_slash_recommendation — only after FINALIZED above ─
+    logger.info(f"create_slashing_case confirmed — now sending generate_slash_recommendation for {case_id}")
+    for attempt in range(3):
+        result = await genlayer_client.send_transaction(
+            "generate_slash_recommendation",
+            [case_id,
+             f"Violation type: {violation_type} on {network}",
+             "Obtained from monitoring records",
+             f"{network} standard slashing policy",
+             80],
+            signer_private_key=signer_key,
+        )
+        if not result.get("tx_hash"):
+            logger.error(f"generate_slash_recommendation send failed ({case_id}): {result}")
+            return
+        confirmed = await poll_until_finalized(result["tx_hash"], "generate_slash_recommendation")
+        if confirmed:
+            break
+        if attempt == 2:
+            logger.error(f"generate_slash_recommendation never confirmed after 3 attempts")
+            return
+        logger.warning(f"generate_slash_recommendation attempt {attempt+1} undetermined — retrying")
 
-        # ── Sync on-chain data back to DB ─────────────────────────────────────
-        try:
-            on_chain = await genlayer_client.call_view("get_slashing_case", [case_id])
-            update_vals: dict = {
-                "status": SlashingStatus.AI_ANALYSIS,
-                "genlayer_tx_hash": result.get("tx_hash"),
-            }
-            if isinstance(on_chain, dict):
-                update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
-                update_vals["recommended_slash_percentage"] = on_chain.get("slash_percentage")
-                update_vals["recommended_slash_amount"] = on_chain.get("slash_amount")
-                update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
-                update_vals["ai_rationale"] = on_chain.get("rationale") or on_chain.get("reasoning")
+    # ── Sync on-chain data back to DB (fresh connection) ──────────────────
+    try:
+        on_chain = await genlayer_client.call_view("get_slashing_case", [case_id])
+        update_vals: dict = {
+            "status": SlashingStatus.AI_ANALYSIS,
+            "genlayer_tx_hash": result.get("tx_hash"),
+        }
+        if isinstance(on_chain, dict):
+            update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
+            update_vals["recommended_slash_percentage"] = on_chain.get("slash_percentage")
+            update_vals["recommended_slash_amount"] = on_chain.get("slash_amount")
+            update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+            update_vals["ai_rationale"] = on_chain.get("rationale") or on_chain.get("reasoning")
+        async with AsyncSessionLocal() as db:
             await db.execute(
                 update(SlashingCase)
                 .where(SlashingCase.id == uuid.UUID(case_id))
                 .values(**update_vals)
             )
             await db.commit()
-        except Exception as e:
-            logger.error(f"DB sync failed for slashing case {case_id}: {e}")
+    except Exception as e:
+        logger.error(f"DB sync failed for slashing case {case_id}: {e}")
 
 
 @router.get("/{case_id}")
