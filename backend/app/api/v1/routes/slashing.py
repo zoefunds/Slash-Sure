@@ -228,7 +228,7 @@ async def get_slashing_case(
     if not case:
         raise HTTPException(status_code=404, detail="Slashing case not found")
 
-    on_chain = await genlayer_client.call_view("get_slashing_case_summary", [case_id])
+    on_chain = await genlayer_client.call_view("get_slashing_case", [case_id])
 
     return {
         "id": str(case.id),

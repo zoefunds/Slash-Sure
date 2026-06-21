@@ -205,7 +205,7 @@ async def get_claim(
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
 
-    on_chain = await genlayer_client.call_view("get_claim_summary", [claim_id])
+    on_chain = await genlayer_client.call_view("get_claim", [claim_id])
 
     return {
         "id": str(claim.id),

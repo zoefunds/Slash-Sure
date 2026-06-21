@@ -249,7 +249,7 @@ async def _submit_evidence_and_analyze(
     try:
         from sqlalchemy import update
         from app.models.incident import Incident
-        on_chain = await genlayer_client.call_view("get_ai_verdict", [incident_id])
+        on_chain = await genlayer_client.call_view("get_verdict", [incident_id])
         update_vals: dict = {
             "status": IncidentStatus.AI_REVIEW,
             "genlayer_tx_hash": verdict.get("tx_hash"),
@@ -283,7 +283,7 @@ async def get_incident(
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Fetch on-chain verdict
-    verdict = await genlayer_client.call_view("get_ai_verdict", [incident_id])
+    verdict = await genlayer_client.call_view("get_verdict", [incident_id])
 
     return {
         "id": str(incident.id),
