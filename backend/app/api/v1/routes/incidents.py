@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import uuid
 from typing import Optional
@@ -163,6 +164,46 @@ async def create_incident(
     }
 
 
+async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
+    """
+    Block until tx_hash has a 0x1 receipt on GenLayer.
+    Returns True only on 0x1. Returns False on 0x0 (UNDETERMINED) or timeout (10 min).
+    Polls every 6 seconds. analyze_fault / adjudicate_claim / etc. must NOT be
+    called unless this returns True.
+    """
+    import httpx as _httpx
+    from loguru import logger as _log
+    RPC = "https://studio.genlayer.com/api"
+    MAX_ATTEMPTS = 100  # 100 × 6s = 10 minutes max wait
+
+    for attempt in range(MAX_ATTEMPTS):
+        await asyncio.sleep(6)
+        try:
+            async with _httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(RPC, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_getTransactionReceipt",
+                    "params": [tx_hash],
+                })
+                receipt = r.json().get("result")
+                if receipt is None:
+                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
+                    continue
+                status = receipt.get("status")
+                if status == "0x1":
+                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
+                    return True
+                if status == "0x0":
+                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED (0x0) — will retry tx")
+                    return False
+        except Exception as exc:
+            _log.warning(f"[{label}] poll error: {exc}")
+
+    from loguru import logger as _log2
+    _log2.error(f"[{label}] {tx_hash[:16]}… timed out after 10 min — aborting")
+    return False
+
+
 async def _submit_evidence_and_analyze(
     incident_id: str,
     operator_address: str,
@@ -179,24 +220,33 @@ async def _submit_evidence_and_analyze(
     user_id: str,
 ):
     from app.db.base import AsyncSessionLocal
-    from app.services.genlayer.client import wait_for_finalization
+    from loguru import logger
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
-        try:
-            # Step 1: submit evidence — wait for finalization before proceeding
-            ev_result = await genlayer_client.send_and_wait(
+
+        # ── Step 1: submit_evidence ───────────────────────────────────────────
+        for attempt in range(3):
+            ev = await genlayer_client.send_transaction(
                 "submit_evidence",
                 [incident_id, operator_address, violation_type, network,
                  block_number, merkle_root, evidence_count, evidence_summary_hash],
                 signer_private_key=signer_key,
             )
-            if ev_result.get("status") != "confirmed":
-                from loguru import logger
-                logger.error(f"submit_evidence did not confirm for {incident_id}: {ev_result}")
+            if not ev.get("tx_hash"):
+                logger.error(f"submit_evidence send failed ({incident_id}): {ev}")
                 return
+            confirmed = await _poll_until_confirmed(ev["tx_hash"], "submit_evidence")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"submit_evidence never confirmed after 3 attempts — NOT starting analyze_fault")
+                return
+            logger.warning(f"submit_evidence attempt {attempt+1} undetermined — retrying")
 
-            # Step 2: analyze fault ONLY after submit_evidence is finalized on-chain
-            verdict = await genlayer_client.send_and_wait(
+        # ── Step 2: analyze_fault — only reaches here after submit_evidence 0x1 ──
+        logger.info(f"submit_evidence confirmed — now sending analyze_fault for {incident_id}")
+        for attempt in range(3):
+            verdict = await genlayer_client.send_transaction(
                 "analyze_fault",
                 [incident_id, operator_address, violation_type, network,
                  evidence_summary[:2000],
@@ -204,8 +254,19 @@ async def _submit_evidence_and_analyze(
                  stake_amount, int(uptime_pct), slash_count, 80],
                 signer_private_key=signer_key,
             )
+            if not verdict.get("tx_hash"):
+                logger.error(f"analyze_fault send failed ({incident_id}): {verdict}")
+                return
+            confirmed = await _poll_until_confirmed(verdict["tx_hash"], "analyze_fault")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"analyze_fault never confirmed after 3 attempts")
+                return
+            logger.warning(f"analyze_fault attempt {attempt+1} undetermined — retrying")
 
-            # Read back on-chain verdict and sync to DB
+        # ── Sync on-chain verdict back to DB ──────────────────────────────────
+        try:
             from sqlalchemy import update
             from app.models.incident import Incident
             on_chain = await genlayer_client.call_view("get_ai_verdict", [incident_id])
@@ -226,8 +287,7 @@ async def _submit_evidence_and_analyze(
             )
             await db.commit()
         except Exception as e:
-            from loguru import logger
-            logger.error(f"Background analysis failed for incident {incident_id}: {e}")
+            logger.error(f"DB sync failed for incident {incident_id}: {e}")
 
 
 @router.get("/{incident_id}")

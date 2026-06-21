@@ -106,6 +106,41 @@ async def submit_claim(
     return {"id": claim_id, "claim_number": claim_number, "status": "submitted"}
 
 
+async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
+    """
+    Block until tx_hash has a 0x1 receipt on GenLayer.
+    Returns True only on 0x1. Returns False on 0x0 or timeout (10 min).
+    """
+    import asyncio as _asyncio
+    import httpx as _httpx
+    from loguru import logger as _log
+    RPC = "https://studio.genlayer.com/api"
+    for attempt in range(100):  # 100 × 6s = 10 min
+        await _asyncio.sleep(6)
+        try:
+            async with _httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(RPC, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_getTransactionReceipt",
+                    "params": [tx_hash],
+                })
+                receipt = r.json().get("result")
+                if receipt is None:
+                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
+                    continue
+                if receipt.get("status") == "0x1":
+                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
+                    return True
+                if receipt.get("status") == "0x0":
+                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED")
+                    return False
+        except Exception as exc:
+            _log.warning(f"[{label}] poll error: {exc}")
+    from loguru import logger as _log2
+    _log2.error(f"[{label}] timed out waiting for {tx_hash[:16]}")
+    return False
+
+
 async def _submit_and_adjudicate_claim(
     claim_id: str,
     incident_id: str,
@@ -117,24 +152,34 @@ async def _submit_and_adjudicate_claim(
     from app.db.base import AsyncSessionLocal
     from sqlalchemy import update
     from app.models.insurance import InsuranceClaim
+    from loguru import logger
 
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
-        try:
-            # Step 1: submit claim on-chain — wait before proceeding
-            submit_result = await genlayer_client.send_and_wait(
+
+        # ── Step 1: submit_claim ──────────────────────────────────────────────
+        for attempt in range(3):
+            sr = await genlayer_client.send_transaction(
                 "submit_claim",
                 [claim_id, claimant_address, incident_id, claimant_address,
                  coverage_amount, claimed_amount],
                 signer_private_key=signer_key,
             )
-            if submit_result.get("status") != "confirmed":
-                from loguru import logger
-                logger.error(f"submit_claim did not confirm: {claim_id} — {submit_result}")
+            if not sr.get("tx_hash"):
+                logger.error(f"submit_claim send failed ({claim_id}): {sr}")
                 return
+            confirmed = await _poll_until_confirmed(sr["tx_hash"], "submit_claim")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"submit_claim never confirmed — NOT starting adjudicate_claim")
+                return
+            logger.warning(f"submit_claim attempt {attempt+1} undetermined — retrying")
 
-            # Step 2: adjudicate ONLY after submit_claim is finalized on-chain
-            tx = await genlayer_client.send_and_wait(
+        # ── Step 2: adjudicate_claim — only reaches here after submit_claim 0x1 ─
+        logger.info(f"submit_claim confirmed — now sending adjudicate_claim for {claim_id}")
+        for attempt in range(3):
+            tx = await genlayer_client.send_transaction(
                 "adjudicate_claim",
                 [claim_id,
                  f"Incident {incident_id} — coverage claim",
@@ -144,8 +189,19 @@ async def _submit_and_adjudicate_claim(
                  "No prior fraudulent claims"],
                 signer_private_key=signer_key,
             )
+            if not tx.get("tx_hash"):
+                logger.error(f"adjudicate_claim send failed ({claim_id}): {tx}")
+                return
+            confirmed = await _poll_until_confirmed(tx["tx_hash"], "adjudicate_claim")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"adjudicate_claim never confirmed after 3 attempts")
+                return
+            logger.warning(f"adjudicate_claim attempt {attempt+1} undetermined — retrying")
 
-            # Read back on-chain verdict and sync to DB
+        # ── Sync on-chain verdict back to DB ──────────────────────────────────
+        try:
             on_chain = await genlayer_client.call_view("get_claim", [claim_id])
             update_vals: dict = {
                 "status": ClaimStatus.AI_ADJUDICATION,
@@ -156,7 +212,6 @@ async def _submit_and_adjudicate_claim(
                 update_vals["ai_coverage_eligible"] = on_chain.get("coverage_eligible") or on_chain.get("eligible")
                 update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
                 if on_chain.get("status"):
-                    # Map contract status to our enum
                     s = str(on_chain.get("status")).lower()
                     if s in ("approved", "partial", "rejected", "paid"):
                         update_vals["status"] = s
@@ -167,8 +222,7 @@ async def _submit_and_adjudicate_claim(
             )
             await db.commit()
         except Exception as e:
-            from loguru import logger
-            logger.error(f"Claim adjudication failed: {claim_id} — {e}")
+            logger.error(f"DB sync failed for claim {claim_id}: {e}")
 
 
 @router.get("/claims/{claim_id}")

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Optional
 
@@ -115,6 +116,40 @@ async def create_slashing_case(
     return {"id": case_id_str, "case_number": case_number, "status": "pending"}
 
 
+async def _poll_until_confirmed(tx_hash: str, label: str) -> bool:
+    """
+    Block until tx_hash has a 0x1 receipt on GenLayer.
+    Returns True only on 0x1. Returns False on 0x0 or timeout (10 min).
+    """
+    import httpx as _httpx
+    from loguru import logger as _log
+    RPC = "https://studio.genlayer.com/api"
+    for attempt in range(100):  # 100 × 6s = 10 min
+        await asyncio.sleep(6)
+        try:
+            async with _httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(RPC, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_getTransactionReceipt",
+                    "params": [tx_hash],
+                })
+                receipt = r.json().get("result")
+                if receipt is None:
+                    _log.info(f"[{label}] {tx_hash[:16]}… pending (attempt {attempt+1})")
+                    continue
+                if receipt.get("status") == "0x1":
+                    _log.info(f"[{label}] {tx_hash[:16]}… CONFIRMED ✓")
+                    return True
+                if receipt.get("status") == "0x0":
+                    _log.warning(f"[{label}] {tx_hash[:16]}… UNDETERMINED")
+                    return False
+        except Exception as exc:
+            _log.warning(f"[{label}] poll error: {exc}")
+    from loguru import logger as _log2
+    _log2.error(f"[{label}] timed out waiting for {tx_hash[:16]}")
+    return False
+
+
 async def _create_and_recommend_slashing(
     case_id: str,
     operator_address: str,
@@ -127,23 +162,33 @@ async def _create_and_recommend_slashing(
     from app.db.base import AsyncSessionLocal
     from sqlalchemy import update
     from app.models.slashing import SlashingCase
+    from loguru import logger
 
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
-        try:
-            # Step 1: create slashing case on-chain — wait before proceeding
-            create_result = await genlayer_client.send_and_wait(
+
+        # ── Step 1: create_slashing_case ──────────────────────────────────────
+        for attempt in range(3):
+            cr = await genlayer_client.send_transaction(
                 "create_slashing_case",
                 [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
                 signer_private_key=signer_key,
             )
-            if create_result.get("status") != "confirmed":
-                from loguru import logger
-                logger.error(f"create_slashing_case did not confirm: {case_id} — {create_result}")
+            if not cr.get("tx_hash"):
+                logger.error(f"create_slashing_case send failed ({case_id}): {cr}")
                 return
+            confirmed = await _poll_until_confirmed(cr["tx_hash"], "create_slashing_case")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"create_slashing_case never confirmed — NOT starting generate_slash_recommendation")
+                return
+            logger.warning(f"create_slashing_case attempt {attempt+1} undetermined — retrying")
 
-            # Step 2: generate slash recommendation ONLY after create_slashing_case finalized
-            result = await genlayer_client.send_and_wait(
+        # ── Step 2: generate_slash_recommendation — only after 0x1 above ─────
+        logger.info(f"create_slashing_case confirmed — now sending generate_slash_recommendation for {case_id}")
+        for attempt in range(3):
+            result = await genlayer_client.send_transaction(
                 "generate_slash_recommendation",
                 [case_id,
                  f"Violation type: {violation_type} on {network}",
@@ -152,8 +197,19 @@ async def _create_and_recommend_slashing(
                  80],
                 signer_private_key=signer_key,
             )
+            if not result.get("tx_hash"):
+                logger.error(f"generate_slash_recommendation send failed ({case_id}): {result}")
+                return
+            confirmed = await _poll_until_confirmed(result["tx_hash"], "generate_slash_recommendation")
+            if confirmed:
+                break
+            if attempt == 2:
+                logger.error(f"generate_slash_recommendation never confirmed after 3 attempts")
+                return
+            logger.warning(f"generate_slash_recommendation attempt {attempt+1} undetermined — retrying")
 
-            # Read back on-chain recommendation and sync to DB
+        # ── Sync on-chain data back to DB ─────────────────────────────────────
+        try:
             on_chain = await genlayer_client.call_view("get_slashing_case", [case_id])
             update_vals: dict = {
                 "status": SlashingStatus.AI_ANALYSIS,
@@ -172,8 +228,7 @@ async def _create_and_recommend_slashing(
             )
             await db.commit()
         except Exception as e:
-            from loguru import logger
-            logger.error(f"Slashing case background processing failed: {case_id} — {e}")
+            logger.error(f"DB sync failed for slashing case {case_id}: {e}")
 
 
 @router.get("/{case_id}")
