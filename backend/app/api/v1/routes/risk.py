@@ -85,26 +85,42 @@ async def _compute_and_store_reputation(
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db) if user_id else None
         try:
-            tx = await genlayer_client.compute_reputation(
-                operator_address=operator_address,
-                uptime_30d=uptime_30d, uptime_90d=uptime_90d,
-                slash_total=slash_total, slash_90d=slash_90d,
-                incident_90d=incident_90d, missed_30d=missed_30d, total_30d=total_30d,
-                oracle_score=oracle_score, peer_score=peer_score,
-                stake_stability=stake_stability, network=network,
+            from app.models.reputation import ReputationScore
+            # Wait for compute_reputation to finalize before reading state
+            await genlayer_client.send_and_wait(
+                "compute_reputation",
+                [operator_address, uptime_30d, uptime_90d, slash_total, slash_90d,
+                 incident_90d, missed_30d, total_30d, oracle_score, peer_score,
+                 stake_stability, network],
                 signer_private_key=signer_key,
             )
-            # Fetch on-chain result and sync to DB
+            # Read back on-chain reputation scores
             on_chain = await genlayer_client.get_operator_reputation(operator_address)
+
+            # Update operator uptime
+            await db.execute(
+                update(Operator)
+                .where(Operator.id == uuid.UUID(operator_db_id))
+                .values(uptime_percentage=float(uptime_30d))
+            )
+
+            # Upsert into reputation_scores
+            op_uuid = uuid.UUID(operator_db_id)
+            rep_result = await db.execute(
+                select(ReputationScore).where(ReputationScore.operator_id == op_uuid)
+            )
+            rep = rep_result.scalar_one_or_none()
+            if rep is None:
+                rep = ReputationScore(operator_id=op_uuid)
+                db.add(rep)
+
             if on_chain:
-                await db.execute(
-                    update(Operator)
-                    .where(Operator.id == uuid.UUID(operator_db_id))
-                    .values(
-                        uptime_percentage=float(uptime_30d),
-                    )
-                )
-                await db.commit()
+                rep.reliability_score = float(on_chain.get("reliability_score") or rep.reliability_score)
+                rep.security_score = float(on_chain.get("security_score") or rep.security_score)
+                rep.slashing_risk_score = float(on_chain.get("slashing_risk_score") or rep.slashing_risk_score)
+                rep.overall_score = float(on_chain.get("reputation_score") or rep.overall_score)
+
+            await db.commit()
         except Exception as e:
             from loguru import logger
             logger.error(f"Reputation compute failed: {operator_address} — {e}")
@@ -172,18 +188,52 @@ async def get_operator_risk_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.models.reputation import ReputationScore
     op_result = await db.execute(select(Operator).where(Operator.address == operator_address))
     operator = op_result.scalar_one_or_none()
     if not operator:
         raise HTTPException(status_code=404, detail="Operator not found")
 
+    # Load DB reputation scores
+    rep_result = await db.execute(
+        select(ReputationScore).where(ReputationScore.operator_id == operator.id)
+    )
+    rep = rep_result.scalar_one_or_none()
+
+    # Also try on-chain (may have fresher data)
     on_chain_reputation = await genlayer_client.get_operator_reputation(operator_address)
     on_chain_prediction = await genlayer_client.call_view("get_risk_prediction", [operator_address])
+
+    # Flatten scores: on-chain takes precedence over DB
+    reliability_score = (
+        (on_chain_reputation or {}).get("reliability_score")
+        or (rep.reliability_score if rep else None)
+    )
+    security_score = (
+        (on_chain_reputation or {}).get("security_score")
+        or (rep.security_score if rep else None)
+    )
+    slashing_risk_score = (
+        (on_chain_reputation or {}).get("slashing_risk_score")
+        or (rep.slashing_risk_score if rep else None)
+    )
+    reputation_score = (
+        (on_chain_reputation or {}).get("reputation_score")
+        or (rep.overall_score if rep else None)
+    )
+    risk_trend = (rep.risk_trend if rep else "stable") if reputation_score else "stable"
 
     return {
         "operator_address": operator_address,
         "network": operator.network,
         "status": operator.status,
+        # Flat fields the frontend reads directly
+        "reliability_score": reliability_score,
+        "security_score": security_score,
+        "slashing_risk_score": slashing_risk_score,
+        "overall_score": reputation_score,
+        "risk_trend": risk_trend,
+        # Raw on-chain data
         "on_chain_reputation": on_chain_reputation,
         "on_chain_prediction": on_chain_prediction,
     }

@@ -137,7 +137,7 @@ export default function OperatorsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["operators", network, page],
     queryFn: () => operatorsApi.list({ network: network || undefined, page, per_page: 20 }).then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   return (

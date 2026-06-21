@@ -131,30 +131,44 @@ async def _create_and_recommend_slashing(
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
         try:
-            await genlayer_client.create_slashing_case(
-                case_id=case_id,
-                operator_address=operator_address,
-                incident_id=incident_id,
-                violation_type=violation_type,
-                network=network,
-                stake_at_risk=stake_at_risk,
+            # Step 1: create slashing case on-chain — wait before proceeding
+            create_result = await genlayer_client.send_and_wait(
+                "create_slashing_case",
+                [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
                 signer_private_key=signer_key,
             )
-            result = await genlayer_client.generate_slash_recommendation(
-                case_id=case_id,
-                evidence_summary=f"Violation type: {violation_type} on {network}",
-                operator_history="Obtained from monitoring records",
-                network_policy=f"{network} standard slashing policy",
-                current_reputation=80,
+            if create_result.get("status") == "failed":
+                from loguru import logger
+                logger.error(f"create_slashing_case failed: {case_id} — {create_result}")
+                return
+
+            # Step 2: generate slash recommendation after case is finalized
+            result = await genlayer_client.send_and_wait(
+                "generate_slash_recommendation",
+                [case_id,
+                 f"Violation type: {violation_type} on {network}",
+                 "Obtained from monitoring records",
+                 f"{network} standard slashing policy",
+                 80],
                 signer_private_key=signer_key,
             )
+
+            # Read back on-chain recommendation and sync to DB
+            on_chain = await genlayer_client.call_view("get_slashing_case", [case_id])
+            update_vals: dict = {
+                "status": SlashingStatus.AI_ANALYSIS,
+                "genlayer_tx_hash": result.get("tx_hash"),
+            }
+            if isinstance(on_chain, dict):
+                update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
+                update_vals["recommended_slash_percentage"] = on_chain.get("slash_percentage")
+                update_vals["recommended_slash_amount"] = on_chain.get("slash_amount")
+                update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+                update_vals["ai_rationale"] = on_chain.get("rationale") or on_chain.get("reasoning")
             await db.execute(
                 update(SlashingCase)
                 .where(SlashingCase.id == uuid.UUID(case_id))
-                .values(
-                    status=SlashingStatus.AI_ANALYSIS,
-                    genlayer_tx_hash=result.get("tx_hash"),
-                )
+                .values(**update_vals)
             )
             await db.commit()
         except Exception as e:

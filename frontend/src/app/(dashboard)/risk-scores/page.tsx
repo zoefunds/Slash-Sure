@@ -20,6 +20,7 @@ export default function RiskScoresPage() {
   const { data: operatorsData } = useQuery({
     queryKey: ["operators"],
     queryFn: () => operatorsApi.list({ per_page: 50 }).then((r) => r.data),
+    refetchInterval: 10_000,
   });
 
   const operators = operatorsData?.items ?? [];
@@ -39,6 +40,7 @@ export default function RiskScoresPage() {
     },
     enabled: operators.length > 0,
     retry: false,
+    refetchInterval: 10_000,
   });
 
   type EnrichedOp = {

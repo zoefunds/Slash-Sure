@@ -53,20 +53,20 @@ export default function DashboardPage() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: () => monitoringApi.dashboardStats().then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const { data: contractStats, isError: contractError } = useQuery({
     queryKey: ["genlayer-contract-stats"],
     queryFn: () => genlayerApi.getContractStats().then((r) => r.data),
-    refetchInterval: 120_000,
+    refetchInterval: 10_000,
     retry: 1,
   });
 
   const { data: recentData } = useQuery({
     queryKey: ["recent-incidents"],
     queryFn: () => incidentsApi.list({ per_page: 5 }).then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const areaData: { time: string; incidents: number; alerts: number }[] =

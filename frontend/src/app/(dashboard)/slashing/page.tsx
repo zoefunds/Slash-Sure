@@ -145,7 +145,7 @@ export default function SlashingPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["slashing-cases", statusFilter, page],
     queryFn: () => slashingApi.list({ status: statusFilter || undefined, page, per_page: 20 }).then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const STATUSES = ["pending", "ai_analysis", "approved", "rejected", "executed", "appealed"];

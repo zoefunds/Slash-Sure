@@ -190,7 +190,7 @@ export default function InsurancePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["insurance-claims", statusFilter, page],
     queryFn: () => insuranceApi.list({ status: statusFilter || undefined, page, per_page: 20 }).then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const STATUSES = ["submitted", "ai_adjudication", "approved", "partial", "rejected", "paid"];

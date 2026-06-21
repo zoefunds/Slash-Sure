@@ -13,7 +13,7 @@ export default function MonitoringPage() {
   const { data: alerts, refetch: refetchAlerts } = useQuery({
     queryKey: ["alerts"],
     queryFn: () => monitoringApi.alerts({ acknowledged: false }).then((r) => r.data),
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
   });
 
   return (

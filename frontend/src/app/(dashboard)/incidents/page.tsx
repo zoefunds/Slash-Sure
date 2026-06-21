@@ -165,7 +165,7 @@ export default function IncidentsPage() {
   const { data } = useQuery({
     queryKey: ["incidents"],
     queryFn: () => incidentsApi.list().then((r) => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   return (

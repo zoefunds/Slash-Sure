@@ -121,31 +121,49 @@ async def _submit_and_adjudicate_claim(
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
         try:
-            await genlayer_client.submit_claim(
-                claim_id=claim_id,
-                organization=claimant_address,
-                incident_id=incident_id,
-                claimant_address=claimant_address,
-                coverage_amount=coverage_amount,
-                claimed_amount=claimed_amount,
+            # Step 1: submit claim on-chain — wait before proceeding
+            submit_result = await genlayer_client.send_and_wait(
+                "submit_claim",
+                [claim_id, claimant_address, incident_id, claimant_address,
+                 coverage_amount, claimed_amount],
                 signer_private_key=signer_key,
             )
-            tx = await genlayer_client.adjudicate_claim(
-                claim_id=claim_id,
-                incident_summary=f"Incident {incident_id} — coverage claim",
-                policy_terms="Standard SlashSure coverage policy v1.0",
-                damage_evidence=f"Claimed: {claimed_amount} GEN, Coverage: {coverage_amount} GEN",
-                negligence_score=60,
-                claimant_history="No prior fraudulent claims",
+            if submit_result.get("status") == "failed":
+                from loguru import logger
+                logger.error(f"submit_claim failed: {claim_id} — {submit_result}")
+                return
+
+            # Step 2: adjudicate after claim is finalized
+            tx = await genlayer_client.send_and_wait(
+                "adjudicate_claim",
+                [claim_id,
+                 f"Incident {incident_id} — coverage claim",
+                 "Standard SlashSure coverage policy v1.0",
+                 f"Claimed: {claimed_amount} GEN, Coverage: {coverage_amount} GEN",
+                 60,
+                 "No prior fraudulent claims"],
                 signer_private_key=signer_key,
             )
+
+            # Read back on-chain verdict and sync to DB
+            on_chain = await genlayer_client.call_view("get_claim", [claim_id])
+            update_vals: dict = {
+                "status": ClaimStatus.AI_ADJUDICATION,
+                "genlayer_tx_hash": tx.get("tx_hash"),
+            }
+            if isinstance(on_chain, dict):
+                update_vals["approved_amount"] = on_chain.get("approved_amount") or on_chain.get("payout_amount")
+                update_vals["ai_coverage_eligible"] = on_chain.get("coverage_eligible") or on_chain.get("eligible")
+                update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+                if on_chain.get("status"):
+                    # Map contract status to our enum
+                    s = str(on_chain.get("status")).lower()
+                    if s in ("approved", "partial", "rejected", "paid"):
+                        update_vals["status"] = s
             await db.execute(
                 update(InsuranceClaim)
                 .where(InsuranceClaim.id == uuid.UUID(claim_id))
-                .values(
-                    status=ClaimStatus.AI_ADJUDICATION,
-                    genlayer_tx_hash=tx.get("tx_hash"),
-                )
+                .values(**update_vals)
             )
             await db.commit()
         except Exception as e:

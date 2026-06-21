@@ -179,50 +179,50 @@ async def _submit_evidence_and_analyze(
     user_id: str,
 ):
     from app.db.base import AsyncSessionLocal
+    from app.services.genlayer.client import wait_for_finalization
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
         try:
-            # Submit evidence on-chain
-            await genlayer_client.submit_evidence(
-                incident_id=incident_id,
-                operator_address=operator_address,
-                violation_type=violation_type,
-                network=network,
-                block_number=block_number,
-                merkle_root=merkle_root,
-                evidence_count=evidence_count,
-                evidence_summary_hash=evidence_summary_hash,
+            # Step 1: submit evidence — wait for finalization before proceeding
+            ev_result = await genlayer_client.send_and_wait(
+                "submit_evidence",
+                [incident_id, operator_address, violation_type, network,
+                 block_number, merkle_root, evidence_count, evidence_summary_hash],
+                signer_private_key=signer_key,
+            )
+            if ev_result.get("status") == "failed":
+                from loguru import logger
+                logger.error(f"submit_evidence failed for {incident_id}: {ev_result}")
+                return
+
+            # Step 2: analyze fault only after evidence tx finalized
+            verdict = await genlayer_client.send_and_wait(
+                "analyze_fault",
+                [incident_id, operator_address, violation_type, network,
+                 evidence_summary[:2000],
+                 f"Slash count: {slash_count}, Uptime: {uptime_pct}%",
+                 stake_amount, int(uptime_pct), slash_count, 80],
                 signer_private_key=signer_key,
             )
 
-            # Trigger AI fault analysis
-            verdict = await genlayer_client.analyze_fault(
-                incident_id=incident_id,
-                operator_address=operator_address,
-                violation_type=violation_type,
-                network=network,
-                evidence_summary=evidence_summary[:2000],
-                operator_history=f"Slash count: {slash_count}, Uptime: {uptime_pct}%",
-                stake_amount=stake_amount,
-                uptime_pct=int(uptime_pct),
-                prior_slash_count=slash_count,
-                reputation=80,
-                signer_private_key=signer_key,
-            )
-
-            # Update incident in DB with AI results
+            # Read back on-chain verdict and sync to DB
             from sqlalchemy import update
             from app.models.incident import Incident
-            import json
-            if verdict.get("status") == "confirmed":
-                pass  # Receipt confirms on-chain verdict stored
+            on_chain = await genlayer_client.call_view("get_ai_verdict", [incident_id])
+            update_vals: dict = {
+                "status": IncidentStatus.AI_REVIEW,
+                "genlayer_tx_hash": verdict.get("tx_hash"),
+            }
+            if isinstance(on_chain, dict):
+                update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
+                update_vals["ai_severity_score"] = on_chain.get("severity_score")
+                update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+                update_vals["ai_recommended_action"] = on_chain.get("recommended_action")
+                update_vals["ai_analysis_summary"] = on_chain.get("analysis_summary") or on_chain.get("reasoning")
             await db.execute(
                 update(Incident)
                 .where(Incident.id == uuid.UUID(incident_id))
-                .values(
-                    status=IncidentStatus.AI_REVIEW,
-                    genlayer_tx_hash=verdict.get("tx_hash"),
-                )
+                .values(**update_vals)
             )
             await db.commit()
         except Exception as e:

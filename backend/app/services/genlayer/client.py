@@ -12,11 +12,13 @@ import hashlib
 import json
 from typing import Any, Optional
 
+import httpx
 from loguru import logger
 
 from app.core.config import settings
 
 CONTRACT_ADDRESS = "0x2e38E8601A78E55866DEC53133a0A8e13ba40E86"
+GENLAYER_RPC = "https://studio.genlayer.com/api"
 
 # Lazy-initialise the SDK client once on first use
 _sdk_client = None
@@ -54,6 +56,34 @@ async def _run_sync(fn, *args, **kwargs):
     return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
 
 
+async def wait_for_finalization(tx_hash: str, poll_interval: int = 5, timeout: int = 300) -> bool:
+    """Poll eth_getTransactionReceipt until status=0x1 or timeout. Returns True on success."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    async with httpx.AsyncClient(timeout=15) as client:
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                resp = await client.post(GENLAYER_RPC, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_getTransactionReceipt",
+                    "params": [tx_hash],
+                })
+                data = resp.json()
+                receipt = data.get("result")
+                if receipt:
+                    status = receipt.get("status")
+                    if status == "0x1":
+                        logger.info(f"Tx finalized: {tx_hash}")
+                        return True
+                    if status == "0x0":
+                        logger.warning(f"Tx failed/UNDETERMINED: {tx_hash}")
+                        return False
+            except Exception as exc:
+                logger.warning(f"Receipt poll error for {tx_hash}: {exc}")
+            await asyncio.sleep(poll_interval)
+    logger.warning(f"Tx finalization timeout: {tx_hash}")
+    return False
+
+
 class GenLayerClient:
 
     def __init__(self):
@@ -65,8 +95,9 @@ class GenLayerClient:
         self,
         function_name: str,
         args: list,
-        wait_for_receipt: bool = True,
+        wait_for_receipt: bool = False,
         signer_private_key: Optional[str] = None,
+        retries: int = 2,
     ) -> dict:
         if not self.contract_address:
             logger.warning("Contract address not set — skipping: %s", function_name)
@@ -79,26 +110,58 @@ class GenLayerClient:
                 return {"tx_hash": None, "status": "skipped", "reason": "no_signer"}
             signer_private_key = pk
 
-        try:
-            sdk = _get_sdk_client()
-            account = _account_from_key(signer_private_key)
-            tx_hash = await _run_sync(
-                sdk.write_contract,
-                self.contract_address,
-                function_name,
-                account,
-                None,   # consensus_max_rotations — use chain default
-                0,      # value
-                False,  # leader_only
-                args,   # positional args
-                None,   # kwargs
-            )
-            tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
-            logger.info(f"GenLayer tx sent: {function_name} → {tx_hash_str}")
-            return {"tx_hash": tx_hash_str, "status": "pending"}
-        except Exception as exc:
-            logger.error("GenLayer tx failed: %s — %s", function_name, exc)
-            return {"tx_hash": None, "status": "failed", "error": str(exc)}
+        last_err = None
+        for attempt in range(1 + retries):
+            try:
+                sdk = _get_sdk_client()
+                account = _account_from_key(signer_private_key)
+                tx_hash = await _run_sync(
+                    sdk.write_contract,
+                    self.contract_address,
+                    function_name,
+                    account,
+                    None,   # consensus_max_rotations — use chain default
+                    0,      # value
+                    False,  # leader_only
+                    args,   # positional args
+                    None,   # kwargs
+                )
+                tx_hash_str = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
+                logger.info(f"GenLayer tx sent: {function_name} → {tx_hash_str} (attempt {attempt+1})")
+
+                if wait_for_receipt:
+                    success = await wait_for_finalization(tx_hash_str)
+                    if success:
+                        return {"tx_hash": tx_hash_str, "status": "confirmed"}
+                    if attempt < retries:
+                        logger.warning(f"Retrying {function_name} (attempt {attempt+2})")
+                        await asyncio.sleep(3)
+                        continue
+                    return {"tx_hash": tx_hash_str, "status": "undetermined"}
+
+                return {"tx_hash": tx_hash_str, "status": "pending"}
+            except Exception as exc:
+                last_err = exc
+                logger.error("GenLayer tx failed: %s — %s (attempt %d)", function_name, exc, attempt+1)
+                if attempt < retries:
+                    await asyncio.sleep(3)
+
+        return {"tx_hash": None, "status": "failed", "error": str(last_err)}
+
+    async def send_and_wait(
+        self,
+        function_name: str,
+        args: list,
+        signer_private_key: Optional[str] = None,
+        retries: int = 2,
+    ) -> dict:
+        """Send a tx and wait for finalization before returning. Retries on UNDETERMINED."""
+        return await self.send_transaction(
+            function_name, args,
+            wait_for_receipt=True,
+            signer_private_key=signer_private_key,
+            retries=retries,
+        )
 
     async def call_view(self, function_name: str, args: list) -> Any:
         if not self.contract_address:
