@@ -176,8 +176,9 @@ async def _submit_and_adjudicate_claim(
         }
         if isinstance(on_chain, dict):
             update_vals["approved_amount"] = on_chain.get("approved_amount") or on_chain.get("payout_amount")
-            update_vals["ai_coverage_eligible"] = on_chain.get("coverage_eligible") or on_chain.get("eligible")
-            update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
+            # contract uses ai_eligible and ai_confidence
+            update_vals["ai_coverage_eligible"] = on_chain.get("ai_eligible") or on_chain.get("coverage_eligible") or on_chain.get("eligible")
+            update_vals["ai_confidence_score"] = on_chain.get("ai_confidence") or on_chain.get("confidence_score") or on_chain.get("confidence")
             if on_chain.get("status"):
                 s = str(on_chain.get("status")).lower()
                 if s in ("approved", "partial", "rejected", "paid"):

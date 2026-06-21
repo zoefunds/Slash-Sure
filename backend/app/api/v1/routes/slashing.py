@@ -185,7 +185,10 @@ async def _create_and_recommend_slashing(
         }
         if isinstance(on_chain, dict):
             update_vals["ai_fault_probability"] = on_chain.get("fault_probability")
-            update_vals["recommended_slash_percentage"] = on_chain.get("slash_percentage")
+            # contract stores slash_bps (basis points out of 10000) — convert to percentage
+            slash_bps = on_chain.get("slash_bps")
+            if slash_bps is not None:
+                update_vals["recommended_slash_percentage"] = float(slash_bps) / 100
             update_vals["recommended_slash_amount"] = on_chain.get("slash_amount")
             update_vals["ai_confidence_score"] = on_chain.get("confidence_score") or on_chain.get("confidence")
             update_vals["ai_rationale"] = on_chain.get("rationale") or on_chain.get("reasoning")
