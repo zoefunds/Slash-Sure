@@ -135,6 +135,20 @@ async def _create_and_recommend_slashing(
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
 
+    # Ensure operator is registered on-chain before create_slashing_case
+    try:
+        already = await genlayer_client.call_view("operator_exists", [operator_address])
+        if not already:
+            reg = await genlayer_client.send_transaction(
+                "register_operator",
+                [operator_address, operator_address, network, stake_at_risk, ""],
+                signer_private_key=signer_key,
+            )
+            if reg.get("tx_hash"):
+                await poll_until_finalized(reg["tx_hash"], "register_operator")
+    except Exception as exc:
+        logger.warning(f"Operator on-chain check/register skipped for slashing: {exc}")
+
     # ── Step 1: create_slashing_case ──────────────────────────────────────
     for attempt in range(3):
         cr = await genlayer_client.send_transaction(

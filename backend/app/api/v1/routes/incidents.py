@@ -187,6 +187,23 @@ async def _submit_evidence_and_analyze(
     async with AsyncSessionLocal() as db:
         signer_key = await get_user_private_key(user_id, db)
 
+    # ── Step 0: ensure operator is registered on-chain before any contract calls ──
+    if operator_address:
+        try:
+            already = await genlayer_client.call_view("operator_exists", [operator_address])
+            if not already:
+                reg = await genlayer_client.send_transaction(
+                    "register_operator",
+                    [operator_address, operator_address, network,
+                     stake_amount, ""],
+                    signer_private_key=signer_key,
+                )
+                if reg.get("tx_hash"):
+                    await poll_until_finalized(reg["tx_hash"], "register_operator")
+        except Exception as exc:
+            from loguru import logger as _l
+            _l.warning(f"Operator on-chain check/register skipped: {exc}")
+
     # ── Step 1: submit_evidence ───────────────────────────────────────────
     for attempt in range(3):
         ev = await genlayer_client.send_transaction(

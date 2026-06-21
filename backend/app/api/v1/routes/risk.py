@@ -90,6 +90,20 @@ async def _compute_and_store_reputation(
 
     try:
         from app.models.reputation import ReputationScore
+        # Ensure operator is registered on-chain before compute_reputation
+        try:
+            already = await genlayer_client.call_view("operator_exists", [operator_address])
+            if not already:
+                reg = await genlayer_client.send_transaction(
+                    "register_operator",
+                    [operator_address, operator_address, network, 0, ""],
+                    signer_private_key=signer_key,
+                )
+                if reg.get("tx_hash"):
+                    await poll_until_finalized(reg["tx_hash"], "register_operator")
+        except Exception as exc:
+            logger.warning(f"Operator on-chain check/register skipped for reputation: {exc}")
+
         # Send compute_reputation and wait for FINALIZED before reading state
         for attempt in range(3):
             cr = await genlayer_client.send_transaction(
