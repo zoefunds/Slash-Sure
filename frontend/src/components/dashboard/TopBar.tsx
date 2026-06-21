@@ -1,21 +1,33 @@
 "use client";
 
-import { Bell, Search, Wallet } from "lucide-react";
+import { Bell, Search, Wallet, Menu } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { truncateAddress } from "@/lib/utils";
+import { useSidebarCtx } from "./SidebarContext";
 
 export function TopBar() {
   const user = useAuthStore((s) => s.user);
+  const { openMobile } = useSidebarCtx();
 
   return (
-    <header className="h-[60px] border-b border-border bg-background flex items-center justify-between px-6">
-      <div className="relative w-64">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search operators, incidents..."
-          className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-all"
-        />
+    <header className="h-[60px] border-b border-border bg-background flex items-center justify-between px-4 md:px-6">
+      <div className="flex items-center gap-3">
+        {/* Hamburger — mobile only */}
+        <button
+          className="md:hidden p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+          onClick={openMobile}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="relative w-44 md:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search operators, incidents..."
+            className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-card text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-all"
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

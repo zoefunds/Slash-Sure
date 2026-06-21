@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Activity, AlertTriangle,
-  Users, BarChart3, FileText, Zap, Scale, Settings, LogOut, ChevronLeft, Shield,
+  Users, BarChart3, FileText, Zap, Scale, Settings, LogOut, ChevronLeft, Shield, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoIcon } from "@/components/ui/Logo";
@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authApi } from "@/lib/api";
+import { useSidebarCtx } from "./SidebarContext";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -26,11 +27,16 @@ const navItems = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
-export function Sidebar() {
+function NavContent({
+  collapsed,
+  onNavClick,
+}: {
+  collapsed: boolean;
+  onNavClick?: () => void;
+}) {
   const pathname = usePathname();
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -44,71 +50,30 @@ export function Sidebar() {
     router.push("/login");
   };
 
-  return (
-    <aside
-      className={cn(
-        "flex flex-col border-r border-border bg-card transition-all duration-300",
-        collapsed ? "w-14" : "w-56"
-      )}
-    >
-      {/* Logo */}
-      <div className="h-[60px] flex items-center justify-between px-4 border-b border-border">
-        {!collapsed && (
-          <Link href="/" className="flex items-center gap-2 font-bold text-sm">
-            <LogoIcon className="w-6 h-6 shrink-0" />
-            <span>SlashSure</span>
-          </Link>
-        )}
-        {collapsed && (
-          <Link href="/" className="mx-auto">
-            <LogoIcon className="w-6 h-6" />
-          </Link>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="text-muted-foreground hover:text-foreground transition-colors ml-auto"
-        >
-          <ChevronLeft className={cn("w-3.5 h-3.5 transition-transform", collapsed && "rotate-180")} />
-        </button>
-      </div>
+  const linkClass = (href: string) =>
+    cn(
+      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100",
+      pathname === href || pathname.startsWith(href + "/")
+        ? "bg-foreground text-background"
+        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+    );
 
-      {/* Nav */}
+  return (
+    <>
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100",
-                active
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-              )}
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
+        {navItems.map((item) => (
+          <Link key={item.href} href={item.href} className={linkClass(item.href)} onClick={onNavClick}>
+            <item.icon className="w-4 h-4 shrink-0" />
+            {!collapsed && <span>{item.label}</span>}
+          </Link>
+        ))}
         {isSuperadmin && (
-          <Link
-            href="/admin"
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-100",
-              pathname === "/admin" || pathname.startsWith("/admin/")
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            )}
-          >
+          <Link href="/admin" className={linkClass("/admin")} onClick={onNavClick}>
             <Shield className="w-4 h-4 shrink-0" />
             {!collapsed && <span>Admin</span>}
           </Link>
         )}
       </nav>
-
-      {/* Logout */}
       <div className="px-2 pb-3 border-t border-border pt-3">
         <button
           onClick={handleLogout}
@@ -118,6 +83,71 @@ export function Sidebar() {
           {!collapsed && <span>Sign Out</span>}
         </button>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false);
+  const { mobileOpen, closeMobile } = useSidebarCtx();
+
+  return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={closeMobile}
+        />
+      )}
+
+      {/* Mobile drawer */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r border-border bg-card transition-transform duration-300 md:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="h-[60px] flex items-center justify-between px-4 border-b border-border">
+          <Link href="/" className="flex items-center gap-2 font-bold text-sm" onClick={closeMobile}>
+            <LogoIcon className="w-6 h-6 shrink-0" />
+            <span>SlashSure</span>
+          </Link>
+          <button onClick={closeMobile} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <NavContent collapsed={false} onNavClick={closeMobile} />
+      </aside>
+
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col border-r border-border bg-card transition-all duration-300",
+          collapsed ? "w-14" : "w-56"
+        )}
+      >
+        <div className="h-[60px] flex items-center justify-between px-4 border-b border-border">
+          {!collapsed && (
+            <Link href="/" className="flex items-center gap-2 font-bold text-sm">
+              <LogoIcon className="w-6 h-6 shrink-0" />
+              <span>SlashSure</span>
+            </Link>
+          )}
+          {collapsed && (
+            <Link href="/" className="mx-auto">
+              <LogoIcon className="w-6 h-6" />
+            </Link>
+          )}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-muted-foreground hover:text-foreground transition-colors ml-auto"
+          >
+            <ChevronLeft className={cn("w-3.5 h-3.5 transition-transform", collapsed && "rotate-180")} />
+          </button>
+        </div>
+        <NavContent collapsed={collapsed} />
+      </aside>
+    </>
   );
 }
