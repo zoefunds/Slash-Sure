@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { authApi, operatorsApi, incidentsApi, adminApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, authApi, operatorsApi, incidentsApi, adminApi } from "@/lib/api";
 import { Shield, Users, AlertTriangle, BarChart3, UserCheck, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
@@ -26,12 +26,12 @@ export default function AdminPage() {
   }, [me, router]);
 
   const { data: operators } = useQuery({
-    queryKey: ["operators"],
+    queryKey: ["operators", CONTRACT_ADDRESS],
     queryFn: () => operatorsApi.list({ per_page: 100 }).then((r) => r.data),
   });
 
   const { data: incidents } = useQuery({
-    queryKey: ["incidents"],
+    queryKey: ["incidents", CONTRACT_ADDRESS],
     queryFn: () => incidentsApi.list().then((r) => r.data),
   });
 

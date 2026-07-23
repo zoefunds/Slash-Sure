@@ -12,13 +12,15 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = "60"
 REFRESH_TOKEN_EXPIRE_DAYS = "30"
 GENLAYER_RPC_URL = "https://studio.genlayer.com/api"
-GENLAYER_CONTRACT_ADDRESS = "0x8565ecca2743945e4020aEB8D6F4a69f088329c8"
+GENLAYER_CONTRACT_ADDRESS = "0x9Dde77A7fbc2894C938D857E84A2dBe7366354Fa"
 BREVO_SENDER_NAME = "SlashSure"
 SLACK_DEFAULT_CHANNEL = "#slashsure-alerts"
 COSMOS_RPC_URL = "https://rpc.cosmos.network"
 BABYLON_RPC_URL = "https://rpc.babylonchain.io"
 BEACON_API_URL = "https://beaconcha.in/api/v1"
 RATE_LIMIT_PER_MINUTE = "60"
+ALLOWED_ORIGINS = "https://slash-sure.vercel.app,https://slash-sure-2rnq0pewl-adebiyi2002gmailcoms-projects.vercel.app"
+ALLOWED_ORIGIN_REGEX = "^https://.*\\.vercel\\.app$"
 
 [http_service]
 internal_port = 8000

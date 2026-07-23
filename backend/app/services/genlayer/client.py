@@ -152,16 +152,16 @@ class GenLayerClient:
                 logger.info(f"GenLayer tx sent: {function_name} → {tx_hash_str} (attempt {attempt+1})")
 
                 if wait_for_receipt:
-                    result = await wait_for_finalization(tx_hash_str)
-                    if result == "confirmed":
+                    finalized = await poll_until_finalized(tx_hash_str, function_name)
+                    if finalized:
                         return {"tx_hash": tx_hash_str, "status": "confirmed"}
                     # "undetermined" or "timeout" — retry the whole tx if attempts remain
-                    logger.warning(f"{function_name} {result} on attempt {attempt+1}, tx={tx_hash_str}")
+                    logger.warning(f"{function_name} not finalized on attempt {attempt+1}, tx={tx_hash_str}")
                     if attempt < retries:
                         logger.info(f"Re-submitting {function_name} (attempt {attempt+2})")
                         await asyncio.sleep(3)
                         continue
-                    return {"tx_hash": tx_hash_str, "status": result}
+                    return {"tx_hash": tx_hash_str, "status": "undetermined"}
 
                 return {"tx_hash": tx_hash_str, "status": "pending"}
             except Exception as exc:

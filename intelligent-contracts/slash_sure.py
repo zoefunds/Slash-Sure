@@ -6,6 +6,7 @@ from genlayer import *
 import json
 import hashlib
 import re
+from html.parser import HTMLParser
 from html import unescape
 
 
@@ -222,9 +223,51 @@ class SlashSureContract(gl.Contract):
         if not url:
             return ""
 
-        def _strip_html(html: str) -> str:
-            text = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
-            text = re.sub(r"(?is)<style.*?>.*?</style>", " ", text)
+        class _VisibleTextParser(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__()
+                self.parts: list[str] = []
+                self._skip_depth = 0
+
+            def handle_starttag(self, tag: str, attrs):
+                if tag in {"head", "script", "style", "noscript", "svg", "template", "link", "meta", "title"}:
+                    self._skip_depth += 1
+
+            def handle_endtag(self, tag: str):
+                if tag in {"head", "script", "style", "noscript", "svg", "template", "link", "meta", "title"} and self._skip_depth > 0:
+                    self._skip_depth -= 1
+
+            def handle_data(self, data: str):
+                if self._skip_depth > 0:
+                    return
+                chunk = re.sub(r"\s+", " ", unescape(data)).strip()
+                if chunk and chunk not in {"|", "-", "•"}:
+                    self.parts.append(chunk)
+
+        def _extract_visible_text(html: str) -> str:
+            parser = _VisibleTextParser()
+            try:
+                parser.feed(html)
+            except Exception:
+                pass
+            text = " ".join(parser.parts)
+            text = re.sub(r"\s+", " ", text).strip()
+            text = re.sub(r"(?i)\b(home|menu|skip to content|sign in|log in|cookie settings)\b", " ", text)
+            return re.sub(r"\s+", " ", text).strip()
+
+        def _extract_main_html(html: str) -> str:
+            for pattern in (
+                r"(?is)<main[^>]*>(.*?)</main>",
+                r"(?is)<article[^>]*>(.*?)</article>",
+                r"(?is)<section[^>]*>(.*?)</section>",
+                r"(?is)<body[^>]*>(.*?)</body>",
+            ):
+                match = re.search(pattern, html)
+                if match:
+                    return match.group(1)
+            return html
+
+        def _extract_head_summary(html: str) -> str:
             title = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
             description = re.search(
                 r'(?is)<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
@@ -234,19 +277,11 @@ class SlashSureContract(gl.Contract):
                 r'(?is)<meta[^>]+property=["\']og:description["\'][^>]+content=["\'](.*?)["\']',
                 html,
             )
-            head_bits = []
-            if title:
-                head_bits.append(unescape(title.group(1)))
-            if description:
-                head_bits.append(unescape(description.group(1)))
-            if og_description:
-                head_bits.append(unescape(og_description.group(1)))
-            text = re.sub(r"(?is)<[^>]+>", " ", text)
-            text = unescape(text)
-            text = re.sub(r"\s+", " ", text).strip()
-            if head_bits:
-                text = " ".join(head_bits + ([text] if text else []))
-            return text
+            bits = []
+            for match in (title, description, og_description):
+                if match:
+                    bits.append(unescape(match.group(1)).strip())
+            return " ".join(bits).strip()
 
         def _summarize(text: str, limit: int = 1200) -> str:
             if not text:
@@ -272,11 +307,28 @@ class SlashSureContract(gl.Contract):
                 raise gl.vm.UserError("Evidence source returned client error")
             if status >= 500:
                 raise gl.vm.UserError("Evidence source temporarily unavailable")
-            body = response.body.decode("utf-8")[:2000]
-            summary = _summarize(_strip_html(body))
-            if not summary or "<link " in summary or "<html" in summary.lower() or "</" in summary:
-                summary = _summarize(re.sub(r"\s+", " ", re.sub(r"(?is)<[^>]+>", " ", body)).strip())
-            return summary
+            body = response.body.decode("utf-8", errors="ignore")[:40000]
+            head_summary = _extract_head_summary(body)
+            main_html = _extract_main_html(body)
+            main_text = _extract_visible_text(main_html)
+            summary = _summarize(main_text)
+            if not summary:
+                summary = _summarize(_extract_visible_text(body))
+            if not summary and head_summary:
+                summary = _summarize(head_summary)
+            if not summary:
+                summary = _summarize(re.sub(r"(?is)<[^>]+>", " ", body))
+            if "<link" in summary.lower() or "<html" in summary.lower() or "/_next" in summary:
+                cleaned = re.sub(r"(?is)<(link|meta|script|style|noscript|svg|template)[^>]*>.*?</\1>", " ", body)
+                cleaned = re.sub(r"(?is)<(link|meta|script|style|noscript|svg|template)[^>]*\/?>", " ", cleaned)
+                cleaned = re.sub(r"(?is)<[^>]+>", " ", cleaned)
+                summary = _summarize(re.sub(r"\s+", " ", cleaned).strip())
+            if head_summary and head_summary not in summary:
+                summary = _summarize(f"{head_summary}. {summary}".strip())
+            summary = re.sub(r"\s+", " ", summary).strip()
+            if summary and not summary.lower().startswith("this website is about"):
+                summary = f"This website is about {summary}"
+            return summary[:1200]
 
         return gl.eq_principle.strict_eq(fetch)
 

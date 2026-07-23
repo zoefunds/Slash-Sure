@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
 import { cn, scoreColor, truncateAddress } from "@/lib/utils";
-import { operatorsApi, riskApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, operatorsApi, riskApi } from "@/lib/api";
 
 function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
   return (
@@ -18,7 +18,7 @@ function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) 
 
 export default function RiskScoresPage() {
   const { data: operatorsData, isLoading: operatorsLoading } = useQuery({
-    queryKey: ["operators"],
+    queryKey: ["operators", CONTRACT_ADDRESS],
     queryFn: () => operatorsApi.list({ per_page: 50 }).then((r) => r.data),
     refetchInterval: 10_000,
   });

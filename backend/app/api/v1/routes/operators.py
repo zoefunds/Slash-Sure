@@ -8,10 +8,11 @@ import re
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.routes.auth import get_current_user
+from app.core.config import settings
 from app.db.base import get_db
 from app.models.operator import Operator, OperatorStatus
 from app.models.user import OrganizationMember, User
@@ -22,6 +23,17 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/operators", tags=["Operators"])
+
+
+def _current_contract_address() -> str:
+    return settings.GENLAYER_CONTRACT_ADDRESS.strip().lower()
+
+
+def _operator_contract_address(operator: Operator) -> str:
+    if getattr(operator, "contract_address", None):
+        return str(operator.contract_address).strip().lower()
+    metadata = operator.extra_metadata or {}
+    return str(metadata.get("contract_address", "")).strip().lower()
 
 
 class OperatorCreate(BaseModel):
@@ -131,13 +143,13 @@ async def list_operators(
         query = query.where(Operator.network == network)
     if status:
         query = query.where(Operator.status == status)
-
-    count_q = select(func.count()).select_from(query.subquery())
-    total = (await db.execute(count_q)).scalar()
-
-    query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    operators = result.scalars().all()
+    operators = [
+        op for op in result.scalars().all()
+        if _operator_contract_address(op) == _current_contract_address()
+    ]
+    total = len(operators)
+    operators = operators[(page - 1) * per_page : (page - 1) * per_page + per_page]
 
     return {
         "total": total,
@@ -202,7 +214,12 @@ async def create_operator(
     current_user: User = Depends(get_current_user),
 ):
     org_id = await _get_primary_org_id(db, str(current_user.id))
-    existing = await db.execute(select(Operator).where(Operator.address == body.address))
+    existing = await db.execute(
+        select(Operator).where(
+            Operator.address == body.address,
+            Operator.contract_address == _current_contract_address(),
+        )
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Operator address already registered")
 
@@ -217,9 +234,11 @@ async def create_operator(
         description=body.description,
         website=website_verification["website"],
         commission_rate=body.commission_rate,
+        contract_address=settings.GENLAYER_CONTRACT_ADDRESS,
     )
     operator.extra_metadata = {
         **(operator.extra_metadata or {}),
+        "contract_address": settings.GENLAYER_CONTRACT_ADDRESS,
         "website_verification": website_verification,
     }
     db.add(operator)
@@ -257,6 +276,8 @@ async def get_operator(
     )
     operator = result.scalar_one_or_none()
     if not operator:
+        raise HTTPException(status_code=404, detail="Operator not found")
+    if _operator_contract_address(operator) != _current_contract_address():
         raise HTTPException(status_code=404, detail="Operator not found")
 
     reputation = await genlayer_client.get_operator(operator.address)

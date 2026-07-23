@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { insuranceApi, incidentsApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, insuranceApi, incidentsApi } from "@/lib/api";
 import { cn, formatDateTime, formatNumber, statusColor } from "@/lib/utils";
 import { FileText, Plus, X, Loader2, CheckCircle, ArrowRight } from "lucide-react";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
@@ -25,14 +25,14 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false);
 
   const { data: incidents } = useQuery({
-    queryKey: ["incidents-for-claim"],
+    queryKey: ["incidents-for-claim", CONTRACT_ADDRESS],
     queryFn: () => incidentsApi.list({ per_page: 50 }).then((r) => r.data),
   });
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => insuranceApi.submit(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["insurance-claims"] });
+      qc.invalidateQueries({ queryKey: ["insurance-claims", CONTRACT_ADDRESS] });
       setDone(true);
     },
     onError: (err: unknown) => {
@@ -196,13 +196,13 @@ export default function InsurancePage() {
   } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["insurance-claims", statusFilter, page],
+    queryKey: ["insurance-claims", CONTRACT_ADDRESS, statusFilter, page],
     queryFn: () => insuranceApi.list({ status: statusFilter || undefined, page, per_page: 20 }).then((r) => r.data),
     refetchInterval: 10_000,
   });
 
   const { data: selectedClaim } = useQuery({
-    queryKey: ["insurance-claim-detail", selectedClaimId],
+    queryKey: ["insurance-claim-detail", CONTRACT_ADDRESS, selectedClaimId],
     queryFn: () => insuranceApi.get(selectedClaimId as string).then((r) => r.data),
     enabled: !!selectedClaimId,
   });

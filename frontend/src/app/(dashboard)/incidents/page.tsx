@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { incidentsApi, operatorsApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, incidentsApi, operatorsApi } from "@/lib/api";
 import { cn, formatDateTime, severityColor, statusColor } from "@/lib/utils";
 import { AlertTriangle, Plus, X, Loader2, ArrowRight } from "lucide-react";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
@@ -29,7 +29,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
   const [txResult, setTxResult] = useState<{ tx_hash?: string; status?: string } | null>(null);
 
   const { data: operators } = useQuery({
-    queryKey: ["operators"],
+    queryKey: ["operators", CONTRACT_ADDRESS],
     queryFn: () => operatorsApi.list().then((r) => r.data),
   });
 
@@ -39,7 +39,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
       return created;
     },
     onSuccess: async (res, variables) => {
-      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["incidents", CONTRACT_ADDRESS] });
       setTxResult(null);
       const incidentId = res.data?.id as string | undefined;
       if (!incidentId) {
@@ -56,7 +56,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
         description: variables.description,
       });
       setTxResult(webEvidence.data?.on_chain || null);
-      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["incidents", CONTRACT_ADDRESS] });
       setTimeout(onClose, 1200);
     },
     onError: (err: unknown) => {
@@ -240,13 +240,13 @@ export default function IncidentsPage() {
   } | null>(null);
 
   const { data } = useQuery({
-    queryKey: ["incidents"],
+    queryKey: ["incidents", CONTRACT_ADDRESS],
     queryFn: () => incidentsApi.list().then((r) => r.data),
     refetchInterval: 10_000,
   });
 
   const { data: selectedIncident } = useQuery({
-    queryKey: ["incident-detail", selectedIncidentId],
+    queryKey: ["incident-detail", CONTRACT_ADDRESS, selectedIncidentId],
     queryFn: () => incidentsApi.get(selectedIncidentId as string).then((r) => r.data),
     enabled: !!selectedIncidentId,
   });

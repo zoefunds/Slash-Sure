@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { authApi, operatorsApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, authApi, operatorsApi } from "@/lib/api";
 import { cn, formatNumber, statusColor, truncateAddress } from "@/lib/utils";
 import { Users, Plus, X, Loader2, Wallet, ArrowRight } from "lucide-react";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
@@ -40,7 +40,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => operatorsApi.create(data),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["operators"] });
+      qc.invalidateQueries({ queryKey: ["operators", CONTRACT_ADDRESS] });
       setTxResult(res.data?.on_chain || null);
       if (res.data?.on_chain?.status === "finalized" || res.data?.on_chain?.status === "already_registered") {
         setTimeout(onClose, 1200);
@@ -186,13 +186,13 @@ export default function OperatorsPage() {
   } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["operators", network, page],
+    queryKey: ["operators", CONTRACT_ADDRESS, network, page],
     queryFn: () => operatorsApi.list({ network: network || undefined, page, per_page: 20 }).then((r) => r.data),
     refetchInterval: 10_000,
   });
 
   const { data: selectedOperator } = useQuery({
-    queryKey: ["operator-detail", selectedOperatorId],
+    queryKey: ["operator-detail", CONTRACT_ADDRESS, selectedOperatorId],
     queryFn: () => operatorsApi.get(selectedOperatorId as string).then((r) => r.data),
     enabled: !!selectedOperatorId,
   });

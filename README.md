@@ -7,7 +7,7 @@ Powered by [GenLayer](https://genlayer.com) Intelligent Contracts on StudioNet.
 - **Live App:** https://slash-sure.vercel.app
 - **API:** https://slashsure-backend-prod.fly.dev
 - **API Docs:** https://slashsure-backend-prod.fly.dev/api/docs
-- **Intelligent Contract:** `0x8565ecca2743945e4020aEB8D6F4a69f088329c8` on GenLayer StudioNet
+- **Intelligent Contract:** `0x9Dde77A7fbc2894C938D857E84A2dBe7366354Fa` on GenLayer StudioNet
 
 ---
 
@@ -70,7 +70,7 @@ A superadmin-only dashboard gives full system visibility: all users, operators, 
 ┌────────────────▼────────────────────────┐
 │   GenLayer StudioNet                    │
 │   Intelligent Contract                  │
-│   0x8565ecca2743945e4020aEB8D6F4a69f088329c8 │
+│   0x9Dde77A7fbc2894C938D857E84A2dBe7366354Fa │
 │   - register_operator                   │
 │   - analyze_incident (AI)               │
 │   - execute_slash                       │

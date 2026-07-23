@@ -4,14 +4,31 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 
 from app.api.v1.routes.auth import get_current_user
+from app.core.config import settings
 from app.db.base import get_db
-from app.models.monitoring import MonitoringEvent, Alert, AlertRule
+from app.models.monitoring import MonitoringEvent, Alert
 from app.models.user import User
 
 router = APIRouter(prefix="/monitoring", tags=["Monitoring"])
+
+
+def _current_contract_address() -> str:
+    return settings.GENLAYER_CONTRACT_ADDRESS.strip().lower()
+
+
+def _operator_contract_address(operator) -> str:
+    metadata = getattr(operator, "extra_metadata", None) or {}
+    return str(metadata.get("contract_address", "")).strip().lower()
+
+
+def _incident_contract_address(incident) -> str:
+    return str((getattr(incident, "raw_data", None) or {}).get("contract_address", "")).strip().lower()
+
+
+def _claim_contract_address(claim) -> str:
+    return str((getattr(claim, "claim_details", None) or {}).get("contract_address", "")).strip().lower()
 
 
 @router.get("/events")
@@ -123,35 +140,41 @@ async def get_dashboard_stats(
     from app.models.slashing import SlashingCase
     from app.models.insurance import InsuranceClaim
 
-    total_operators = (await db.execute(select(func.count()).select_from(Operator))).scalar()
-    active_operators = (await db.execute(
-        select(func.count()).select_from(Operator).where(Operator.status == "active")
-    )).scalar()
-    open_incidents = (await db.execute(
-        select(func.count()).select_from(Incident).where(
-            Incident.status.in_(["open", "ai_review", "under_review"])
-        )
-    )).scalar()
-    pending_slashing = (await db.execute(
-        select(func.count()).select_from(SlashingCase).where(SlashingCase.status == "pending")
-    )).scalar()
-    active_claims = (await db.execute(
-        select(func.count()).select_from(InsuranceClaim).where(
-            InsuranceClaim.status.in_(["submitted", "under_review", "ai_adjudication"])
-        )
-    )).scalar()
+    operators_result = await db.execute(select(Operator))
+    operators = [
+        op for op in operators_result.scalars().all()
+        if _operator_contract_address(op) == _current_contract_address()
+    ]
+    incidents_result = await db.execute(select(Incident))
+    incidents = [
+        incident for incident in incidents_result.scalars().all()
+        if _incident_contract_address(incident) == _current_contract_address()
+    ]
+    claims_result = await db.execute(select(InsuranceClaim))
+    claims = [
+        claim for claim in claims_result.scalars().all()
+        if _claim_contract_address(claim) == _current_contract_address()
+    ]
+    slashing_result = await db.execute(select(SlashingCase).join(Incident, Incident.id == SlashingCase.incident_id))
+    slashing_cases = [
+        case for case in slashing_result.scalars().all()
+        if _incident_contract_address(case.incident) == _current_contract_address()
+    ]
+
+    total_operators = len(operators)
+    active_operators = sum(1 for op in operators if op.status == "active")
+    open_incidents = sum(1 for incident in incidents if incident.status in ["open", "ai_review", "under_review"])
+    pending_slashing = sum(1 for case in slashing_cases if case.status == "pending")
+    active_claims = sum(1 for claim in claims if claim.status in ["submitted", "under_review", "ai_adjudication"])
     unacknowledged_alerts = (await db.execute(
-        select(func.count()).select_from(Alert).where(Alert.is_acknowledged == False)
+        select(func.count()).select_from(Alert).where(Alert.is_acknowledged.is_(False))
     )).scalar()
 
     # Network distribution: count active operators per network
-    from sqlalchemy import text as sa_text
-    net_rows = (await db.execute(
-        select(Operator.network, func.count().label("cnt"))
-        .where(Operator.status == "active")
-        .group_by(Operator.network)
-    )).all()
-    network_distribution = {row.network: row.cnt for row in net_rows}
+    network_distribution: dict[str, int] = {}
+    for op in operators:
+        if op.status == "active":
+            network_distribution[op.network] = network_distribution.get(op.network, 0) + 1
 
     # Hourly incident counts for last 24 hours (simplified: return empty list if no events)
     from datetime import datetime, timezone, timedelta
@@ -160,12 +183,11 @@ async def get_dashboard_stats(
     for h in range(23, -1, -1):
         bucket_start = now - timedelta(hours=h + 1)
         bucket_end = now - timedelta(hours=h)
-        inc_count = (await db.execute(
-            select(func.count()).select_from(Incident).where(
-                Incident.detected_at >= bucket_start,
-                Incident.detected_at < bucket_end,
-            )
-        )).scalar()
+        inc_count = sum(
+            1
+            for incident in incidents
+            if incident.detected_at and bucket_start <= incident.detected_at < bucket_end
+        )
         hourly_stats.append({
             "hour": bucket_start.strftime("%H:%M"),
             "incidents": inc_count,

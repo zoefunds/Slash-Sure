@@ -51,20 +51,20 @@ function StatCard({
 
 export default function DashboardPage() {
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", CONTRACT_ADDRESS],
     queryFn: () => monitoringApi.dashboardStats().then((r) => r.data),
     refetchInterval: 10_000,
   });
 
   const { data: contractStats, isError: contractError } = useQuery({
-    queryKey: ["genlayer-contract-stats"],
+    queryKey: ["genlayer-contract-stats", CONTRACT_ADDRESS],
     queryFn: () => genlayerApi.getContractStats().then((r) => r.data),
     refetchInterval: 10_000,
     retry: 1,
   });
 
   const { data: recentData } = useQuery({
-    queryKey: ["recent-incidents"],
+    queryKey: ["recent-incidents", CONTRACT_ADDRESS],
     queryFn: () => incidentsApi.list({ per_page: 5 }).then((r) => r.data),
     refetchInterval: 10_000,
   });

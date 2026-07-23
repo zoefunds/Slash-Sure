@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { CONTRACT_ADDRESS } from "@/lib/api";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -18,6 +19,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
       queryClient.clear();
       queryClient.invalidateQueries();
     };
+
+    const contractKey = "slashsure-contract-address";
+    const previousContract = localStorage.getItem(contractKey);
+    if (previousContract !== CONTRACT_ADDRESS) {
+      queryClient.clear();
+      queryClient.invalidateQueries();
+      localStorage.setItem(contractKey, CONTRACT_ADDRESS);
+    }
+
     window.addEventListener("slashsure-auth-change", onAuthChange);
     return () => window.removeEventListener("slashsure-auth-change", onAuthChange);
   }, [queryClient]);

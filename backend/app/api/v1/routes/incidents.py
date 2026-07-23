@@ -1,14 +1,14 @@
-import asyncio
 import hashlib
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.api.v1.routes.auth import get_current_user
+from app.core.config import settings
 from app.db.base import get_db
 from app.models.incident import Incident, IncidentEvidence, IncidentStatus
 from app.models.operator import Operator
@@ -17,6 +17,21 @@ from app.services.genlayer.client import genlayer_client, compute_merkle_root, p
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+
+
+def _current_contract_address() -> str:
+    return settings.GENLAYER_CONTRACT_ADDRESS.strip().lower()
+
+
+def _incident_contract_address(incident: Incident) -> str:
+    return str((incident.raw_data or {}).get("contract_address", "")).strip().lower()
+
+
+def _operator_contract_address(operator: Operator) -> str:
+    if getattr(operator, "contract_address", None):
+        return str(operator.contract_address).strip().lower()
+    metadata = getattr(operator, "extra_metadata", None) or {}
+    return str(metadata.get("contract_address", "")).strip().lower()
 
 
 async def _get_primary_org_id(db: AsyncSession, user_id: str) -> uuid.UUID:
@@ -85,10 +100,14 @@ async def list_incidents(
     if operator_id:
         query = query.where(Incident.operator_id == uuid.UUID(operator_id))
 
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar()
-    query = query.order_by(Incident.detected_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    incidents = result.scalars().all()
+    incidents = [
+        incident
+        for incident in result.scalars().all()
+        if _incident_contract_address(incident) == _current_contract_address()
+    ]
+    total = len(incidents)
+    incidents = incidents[(page - 1) * per_page : (page - 1) * per_page + per_page]
 
     return {
         "total": total,
@@ -128,7 +147,13 @@ async def create_incident(
             Operator.organization_id == org_id,
         )
     )
-    operator = op_result.scalar_one_or_none()
+    operator_candidates = [
+        op for op in op_result.scalars().all()
+        if _operator_contract_address(op) == _current_contract_address()
+    ]
+    operator = operator_candidates[0] if operator_candidates else None
+    if body.operator_address and not operator:
+        raise HTTPException(status_code=404, detail="Operator not found for the active contract")
 
     incident = Incident(
         operator_id=operator.id if operator else None,
@@ -140,7 +165,10 @@ async def create_incident(
         network=body.network,
         block_number=body.block_number,
         transaction_hash=body.transaction_hash,
-        raw_data=body.raw_data,
+        raw_data={
+            **(body.raw_data or {}),
+            "contract_address": settings.GENLAYER_CONTRACT_ADDRESS,
+        },
     )
     db.add(incident)
     await db.flush()
@@ -220,22 +248,20 @@ async def _submit_evidence_and_analyze(
         try:
             already = await genlayer_client.call_view("operator_exists", [operator_address])
             if not already:
-                reg = await genlayer_client.send_transaction(
+                await genlayer_client.send_and_wait(
                     "register_operator",
                     [operator_address, operator_address, network,
                      stake_amount, ""],
                     signer_private_key=signer_key,
                     value=stake_amount,
                 )
-                if reg.get("tx_hash"):
-                    await poll_until_finalized(reg["tx_hash"], "register_operator")
         except Exception as exc:
             from loguru import logger as _l
             _l.warning(f"Operator on-chain check/register skipped: {exc}")
 
     # ── Step 1: submit_evidence ───────────────────────────────────────────
     for attempt in range(3):
-        ev = await genlayer_client.send_transaction(
+        ev = await genlayer_client.send_and_wait(
             "submit_evidence",
             [incident_id, operator_address, violation_type, network,
              block_number, merkle_root, evidence_count, evidence_summary_hash],
@@ -248,14 +274,14 @@ async def _submit_evidence_and_analyze(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"submit_evidence never confirmed after 3 attempts — NOT starting analyze_fault")
+            logger.error("submit_evidence never confirmed after 3 attempts — NOT starting analyze_fault")
             return
         logger.warning(f"submit_evidence attempt {attempt+1} undetermined — retrying")
 
     # ── Step 2: analyze_fault — only reaches here after submit_evidence FINALIZED ──
     logger.info(f"submit_evidence confirmed — now sending analyze_fault for {incident_id}")
     for attempt in range(3):
-        verdict = await genlayer_client.send_transaction(
+        verdict = await genlayer_client.send_and_wait(
             "analyze_fault",
             [incident_id, operator_address, violation_type, network,
              evidence_summary[:2000],
@@ -270,7 +296,7 @@ async def _submit_evidence_and_analyze(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"analyze_fault never confirmed after 3 attempts")
+            logger.error("analyze_fault never confirmed after 3 attempts")
             return
         logger.warning(f"analyze_fault attempt {attempt+1} undetermined — retrying")
 
@@ -321,6 +347,8 @@ async def get_incident(
     )
     if not op_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Incident not found")
+    if _incident_contract_address(incident) != _current_contract_address():
+        raise HTTPException(status_code=404, detail="Incident not found")
 
     # Fetch on-chain verdict
     verdict = await genlayer_client.call_view("get_verdict", [incident_id])
@@ -368,6 +396,8 @@ async def add_evidence(
         )
     )
     if not op_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if _incident_contract_address(incident) != _current_contract_address():
         raise HTTPException(status_code=404, detail="Incident not found")
 
     ev = IncidentEvidence(

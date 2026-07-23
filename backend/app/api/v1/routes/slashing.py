@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from decimal import Decimal, InvalidOperation
 from typing import Optional
@@ -150,20 +149,18 @@ async def _create_and_recommend_slashing(
     try:
         already = await genlayer_client.call_view("operator_exists", [operator_address])
         if not already:
-            reg = await genlayer_client.send_transaction(
+            await genlayer_client.send_and_wait(
                 "register_operator",
                 [operator_address, operator_address, network, stake_at_risk, ""],
                 signer_private_key=signer_key,
                 value=stake_at_risk,
             )
-            if reg.get("tx_hash"):
-                await poll_until_finalized(reg["tx_hash"], "register_operator")
     except Exception as exc:
         logger.warning(f"Operator on-chain check/register skipped for slashing: {exc}")
 
     # ── Step 1: create_slashing_case ──────────────────────────────────────
     for attempt in range(3):
-        cr = await genlayer_client.send_transaction(
+        cr = await genlayer_client.send_and_wait(
             "create_slashing_case",
                 [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
                 signer_private_key=signer_key,
@@ -175,14 +172,14 @@ async def _create_and_recommend_slashing(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"create_slashing_case never confirmed — NOT starting generate_slash_recommendation")
+            logger.error("create_slashing_case never confirmed - NOT starting generate_slash_recommendation")
             return
         logger.warning(f"create_slashing_case attempt {attempt+1} undetermined — retrying")
 
     # ── Step 2: generate_slash_recommendation — only after FINALIZED above ─
     logger.info(f"create_slashing_case confirmed — now sending generate_slash_recommendation for {case_id}")
     for attempt in range(3):
-        result = await genlayer_client.send_transaction(
+        result = await genlayer_client.send_and_wait(
             "generate_slash_recommendation",
             [case_id,
              f"Violation type: {violation_type} on {network}",
@@ -198,7 +195,7 @@ async def _create_and_recommend_slashing(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"generate_slash_recommendation never confirmed after 3 attempts")
+            logger.error("generate_slash_recommendation never confirmed after 3 attempts")
             return
         logger.warning(f"generate_slash_recommendation attempt {attempt+1} undetermined — retrying")
 

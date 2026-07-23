@@ -1,12 +1,21 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.incident import Incident
+    from app.models.reputation import ReputationScore
+    from app.models.slashing import SlashingCase
+    from app.models.user import Organization
 
 
 class NetworkType(str, Enum):
@@ -44,6 +53,7 @@ class Operator(Base):
     commission_rate: Mapped[float] = mapped_column(Float, default=0.0)
     uptime_percentage: Mapped[float] = mapped_column(Float, default=100.0)
     slash_count: Mapped[int] = mapped_column(Integer, default=0)
+    contract_address: Mapped[str] = mapped_column(String(100), nullable=True, index=True)
     extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     on_chain_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)

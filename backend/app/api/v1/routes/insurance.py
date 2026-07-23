@@ -2,11 +2,12 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.api.v1.routes.auth import get_current_user
+from app.core.config import settings
 from app.db.base import get_db
 from app.models.insurance import InsuranceClaim, InsurancePayout, ClaimStatus
 from app.models.user import OrganizationMember, User
@@ -14,6 +15,14 @@ from app.services.genlayer.client import genlayer_client, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/insurance", tags=["Insurance"])
+
+
+def _current_contract_address() -> str:
+    return settings.GENLAYER_CONTRACT_ADDRESS.strip().lower()
+
+
+def _claim_contract_address(claim: InsuranceClaim) -> str:
+    return str((claim.claim_details or {}).get("contract_address", "")).strip().lower()
 
 
 async def _get_primary_org_id(db: AsyncSession, user_id: str) -> uuid.UUID:
@@ -56,10 +65,14 @@ async def list_claims(
     if status:
         query = query.where(InsuranceClaim.status == status)
 
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar()
-    query = query.order_by(InsuranceClaim.submitted_at.desc()).offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
-    claims = result.scalars().all()
+    claims = [
+        claim
+        for claim in result.scalars().all()
+        if _claim_contract_address(claim) == _current_contract_address()
+    ]
+    total = len(claims)
+    claims = claims[(page - 1) * per_page : (page - 1) * per_page + per_page]
 
     return {
         "total": total,
@@ -103,7 +116,10 @@ async def submit_claim(
         coverage_amount=body.coverage_amount,
         claimed_amount=body.claimed_amount,
         policy_id=body.policy_id,
-        claim_details=body.claim_details,
+        claim_details={
+            **(body.claim_details or {}),
+            "contract_address": settings.GENLAYER_CONTRACT_ADDRESS,
+        },
         status=ClaimStatus.SUBMITTED,
     )
     db.add(claim)
@@ -142,7 +158,7 @@ async def _submit_and_adjudicate_claim(
 
     # ── Step 1: submit_claim ──────────────────────────────────────────────
     for attempt in range(3):
-        sr = await genlayer_client.send_transaction(
+        sr = await genlayer_client.send_and_wait(
             "submit_claim",
             [claim_id, claimant_address, incident_id, claimant_address,
              coverage_amount, claimed_amount],
@@ -155,14 +171,14 @@ async def _submit_and_adjudicate_claim(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"submit_claim never confirmed — NOT starting adjudicate_claim")
+            logger.error("submit_claim never confirmed — NOT starting adjudicate_claim")
             return
         logger.warning(f"submit_claim attempt {attempt+1} undetermined — retrying")
 
     # ── Step 2: adjudicate_claim — only reaches here after submit_claim FINALIZED ─
     logger.info(f"submit_claim confirmed — now sending adjudicate_claim for {claim_id}")
     for attempt in range(3):
-        tx = await genlayer_client.send_transaction(
+        tx = await genlayer_client.send_and_wait(
             "adjudicate_claim",
             [claim_id,
              f"Incident {incident_id} — coverage claim",
@@ -179,7 +195,7 @@ async def _submit_and_adjudicate_claim(
         if confirmed:
             break
         if attempt == 2:
-            logger.error(f"adjudicate_claim never confirmed after 3 attempts")
+            logger.error("adjudicate_claim never confirmed after 3 attempts")
             return
         logger.warning(f"adjudicate_claim attempt {attempt+1} undetermined — retrying")
 
@@ -223,6 +239,8 @@ async def get_claim(
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Claim not found")
+    if _claim_contract_address(claim) != _current_contract_address():
+        raise HTTPException(status_code=404, detail="Claim not found")
 
     on_chain = await genlayer_client.call_view("get_claim", [claim_id])
 
@@ -252,11 +270,14 @@ async def authorize_payout(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     result = await db.execute(select(InsuranceClaim).where(InsuranceClaim.id == uuid.UUID(claim_id)))
     claim = result.scalar_one_or_none()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if _claim_contract_address(claim) != _current_contract_address():
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim.status not in [ClaimStatus.APPROVED, ClaimStatus.PARTIAL]:
         raise HTTPException(status_code=400, detail="Claim not in approved state")
