@@ -233,7 +233,7 @@ export default function DashboardPage() {
             {contractError ? "StudioNet Unreachable" : "StudioNet Live"}
           </span>
           <a
-            href={`https://studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
+            href={`https://explorer-studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors font-mono truncate max-w-[220px]"

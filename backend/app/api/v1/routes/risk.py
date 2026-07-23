@@ -98,6 +98,7 @@ async def _compute_and_store_reputation(
                     "register_operator",
                     [operator_address, operator_address, network, 0, ""],
                     signer_private_key=signer_key,
+                    value=0,
                 )
                 if reg.get("tx_hash"):
                     await poll_until_finalized(reg["tx_hash"], "register_operator")

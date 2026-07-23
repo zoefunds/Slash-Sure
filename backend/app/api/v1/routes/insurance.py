@@ -9,11 +9,23 @@ from pydantic import BaseModel
 from app.api.v1.routes.auth import get_current_user
 from app.db.base import get_db
 from app.models.insurance import InsuranceClaim, InsurancePayout, ClaimStatus
-from app.models.user import User
+from app.models.user import OrganizationMember, User
 from app.services.genlayer.client import genlayer_client, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/insurance", tags=["Insurance"])
+
+
+async def _get_primary_org_id(db: AsyncSession, user_id: str) -> uuid.UUID:
+    result = await db.execute(
+        select(OrganizationMember.organization_id)
+        .where(OrganizationMember.user_id == uuid.UUID(user_id))
+        .order_by(OrganizationMember.joined_at.asc())
+    )
+    org_id = result.scalars().first()
+    if not org_id:
+        raise HTTPException(status_code=403, detail="No organization membership found for this user")
+    return org_id
 
 
 class ClaimCreate(BaseModel):
@@ -38,7 +50,9 @@ async def list_claims(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     query = select(InsuranceClaim)
+    query = query.where(InsuranceClaim.organization_id == org_id)
     if status:
         query = query.where(InsuranceClaim.status == status)
 
@@ -75,11 +89,13 @@ async def submit_claim(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     import secrets
     claim_number = f"CLM-{secrets.token_hex(4).upper()}"
     claim_id = str(uuid.uuid4())
 
     claim = InsuranceClaim(
+        organization_id=org_id,
         id=uuid.UUID(claim_id),
         claim_number=claim_number,
         incident_id=uuid.UUID(body.incident_id),
@@ -200,9 +216,12 @@ async def get_claim(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     result = await db.execute(select(InsuranceClaim).where(InsuranceClaim.id == uuid.UUID(claim_id)))
     claim = result.scalar_one_or_none()
     if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Claim not found")
 
     on_chain = await genlayer_client.call_view("get_claim", [claim_id])
@@ -236,6 +255,8 @@ async def authorize_payout(
     result = await db.execute(select(InsuranceClaim).where(InsuranceClaim.id == uuid.UUID(claim_id)))
     claim = result.scalar_one_or_none()
     if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Claim not found")
     if claim.status not in [ClaimStatus.APPROVED, ClaimStatus.PARTIAL]:
         raise HTTPException(status_code=400, detail="Claim not in approved state")

@@ -1,6 +1,5 @@
 """
-GenLayer client — all on-chain calls for SlashSure contract
-0x9A91eBfC28832E70c541De5EF46BE99714691922 (StudioNet)
+GenLayer client for the configured SlashSure intelligent contract.
 
 Uses genlayer-py SDK (>=0.8.1) with the proper write_contract/read_contract
 flow through the Consensus Main Contract.
@@ -17,7 +16,6 @@ from loguru import logger
 
 from app.core.config import settings
 
-CONTRACT_ADDRESS = "0x9A91eBfC28832E70c541De5EF46BE99714691922"
 GENLAYER_RPC = "https://studio.genlayer.com/api"
 
 # Lazy-initialise the SDK client once on first use
@@ -110,7 +108,7 @@ async def poll_until_finalized(tx_hash: str, label: str) -> bool:
 class GenLayerClient:
 
     def __init__(self):
-        self.contract_address = settings.GENLAYER_CONTRACT_ADDRESS or CONTRACT_ADDRESS
+        self.contract_address = settings.GENLAYER_CONTRACT_ADDRESS
 
     # ── Core helpers ──────────────────────────────────────────────────────────
 
@@ -120,6 +118,7 @@ class GenLayerClient:
         args: list,
         wait_for_receipt: bool = False,
         signer_private_key: Optional[str] = None,
+        value: int = 0,
         retries: int = 2,
     ) -> dict:
         if not self.contract_address:
@@ -144,7 +143,7 @@ class GenLayerClient:
                     function_name,
                     account,
                     None,   # consensus_max_rotations — use chain default
-                    0,      # value
+                    value,  # payable value in wei
                     False,  # leader_only
                     args,   # positional args
                     None,   # kwargs
@@ -226,6 +225,7 @@ class GenLayerClient:
         return await self.send_transaction(
             "register_operator", [address, name, network, stake, metadata_hash],
             signer_private_key=signer_private_key,
+            value=stake,
         )
 
     async def update_operator_stake(self, address: str, new_stake: int, signer_private_key: Optional[str] = None) -> dict:
@@ -297,6 +297,22 @@ class GenLayerClient:
             "submit_evidence",
             [incident_id, operator_address, violation_type, network,
              block_number, merkle_root, evidence_count, evidence_summary_hash],
+            signer_private_key=signer_private_key,
+        )
+
+    async def fetch_and_submit_evidence(
+        self,
+        incident_id: str,
+        operator_address: str,
+        violation_type: str,
+        network: str,
+        block_number: int,
+        evidence_url: str,
+        signer_private_key: Optional[str] = None,
+    ) -> dict:
+        return await self.send_transaction(
+            "fetch_and_submit_evidence",
+            [incident_id, operator_address, violation_type, network, block_number, evidence_url],
             signer_private_key=signer_private_key,
         )
 

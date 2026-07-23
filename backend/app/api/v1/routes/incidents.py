@@ -12,11 +12,23 @@ from app.api.v1.routes.auth import get_current_user
 from app.db.base import get_db
 from app.models.incident import Incident, IncidentEvidence, IncidentStatus
 from app.models.operator import Operator
-from app.models.user import User
+from app.models.user import OrganizationMember, User
 from app.services.genlayer.client import genlayer_client, compute_merkle_root, poll_until_finalized
 from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+
+
+async def _get_primary_org_id(db: AsyncSession, user_id: str) -> uuid.UUID:
+    result = await db.execute(
+        select(OrganizationMember.organization_id)
+        .where(OrganizationMember.user_id == uuid.UUID(user_id))
+        .order_by(OrganizationMember.joined_at.asc())
+    )
+    org_id = result.scalars().first()
+    if not org_id:
+        raise HTTPException(status_code=403, detail="No organization membership found for this user")
+    return org_id
 
 
 class IncidentCreate(BaseModel):
@@ -40,6 +52,16 @@ class EvidenceAdd(BaseModel):
     on_chain_proof: dict = {}
 
 
+class WebEvidenceAdd(BaseModel):
+    operator_address: Optional[str] = None
+    incident_type: str = "protocol_violation"
+    network: str
+    title: str
+    evidence_url: str
+    block_number: Optional[int] = None
+    description: Optional[str] = None
+
+
 @router.get("/")
 async def list_incidents(
     network: Optional[str] = Query(None),
@@ -51,7 +73,9 @@ async def list_incidents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     query = select(Incident)
+    query = query.join(Operator, Operator.id == Incident.operator_id).where(Operator.organization_id == org_id)
     if network:
         query = query.where(Incident.network == network)
     if status:
@@ -96,9 +120,13 @@ async def create_incident(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     # Look up operator
     op_result = await db.execute(
-        select(Operator).where(Operator.address == body.operator_address)
+        select(Operator).where(
+            Operator.address == body.operator_address,
+            Operator.organization_id == org_id,
+        )
     )
     operator = op_result.scalar_one_or_none()
 
@@ -197,6 +225,7 @@ async def _submit_evidence_and_analyze(
                     [operator_address, operator_address, network,
                      stake_amount, ""],
                     signer_private_key=signer_key,
+                    value=stake_amount,
                 )
                 if reg.get("tx_hash"):
                     await poll_until_finalized(reg["tx_hash"], "register_operator")
@@ -277,9 +306,20 @@ async def get_incident(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     result = await db.execute(select(Incident).where(Incident.id == uuid.UUID(incident_id)))
     incident = result.scalar_one_or_none()
     if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if not incident.operator_id:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    op_result = await db.execute(
+        select(Operator).where(
+            Operator.id == incident.operator_id,
+            Operator.organization_id == org_id,
+        )
+    )
+    if not op_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Incident not found")
 
     # Fetch on-chain verdict
@@ -314,9 +354,20 @@ async def add_evidence(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
     result = await db.execute(select(Incident).where(Incident.id == uuid.UUID(incident_id)))
     incident = result.scalar_one_or_none()
     if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if not incident.operator_id:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    op_result = await db.execute(
+        select(Operator).where(
+            Operator.id == incident.operator_id,
+            Operator.organization_id == org_id,
+        )
+    )
+    if not op_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Incident not found")
 
     ev = IncidentEvidence(
@@ -330,3 +381,72 @@ async def add_evidence(
     )
     db.add(ev)
     return {"id": str(ev.id), "status": "added"}
+
+
+@router.post("/{incident_id}/web-evidence")
+async def add_web_evidence(
+    incident_id: str,
+    body: WebEvidenceAdd,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
+    result = await db.execute(select(Incident).where(Incident.id == uuid.UUID(incident_id)))
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if not incident.operator_id:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    op_result = await db.execute(
+        select(Operator).where(
+            Operator.id == incident.operator_id,
+            Operator.organization_id == org_id,
+        )
+    )
+    if not op_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    operator_address = body.operator_address
+    if not operator_address and incident.operator_id:
+        op_result = await db.execute(select(Operator).where(Operator.id == incident.operator_id))
+        operator = op_result.scalar_one_or_none()
+        operator_address = operator.address if operator else None
+    if not operator_address:
+        raise HTTPException(status_code=400, detail="Operator address is required for web evidence")
+
+    ev = IncidentEvidence(
+        incident_id=incident.id,
+        evidence_type="web",
+        title=body.title,
+        content=body.description or body.evidence_url,
+        source_url=body.evidence_url,
+        merkle_hash=hashlib.sha256((body.description or body.evidence_url).encode()).hexdigest(),
+    )
+    db.add(ev)
+    await db.flush()
+
+    from app.db.base import AsyncSessionLocal
+    async with AsyncSessionLocal() as signer_db:
+        signer_key = await get_user_private_key(str(current_user.id), signer_db)
+
+    tx = await genlayer_client.fetch_and_submit_evidence(
+        incident_id=incident_id,
+        operator_address=operator_address,
+        violation_type=body.incident_type,
+        network=body.network,
+        block_number=body.block_number or 0,
+        evidence_url=body.evidence_url,
+        signer_private_key=signer_key,
+    )
+    finalized = False
+    if tx.get("tx_hash"):
+        finalized = await poll_until_finalized(tx["tx_hash"], "fetch_and_submit_evidence")
+
+    return {
+        "id": str(ev.id),
+        "status": "added",
+        "on_chain": {
+            "tx_hash": tx.get("tx_hash"),
+            "status": "finalized" if finalized else tx.get("status", "pending"),
+        },
+    }

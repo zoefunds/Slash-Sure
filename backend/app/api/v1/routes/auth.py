@@ -1,4 +1,5 @@
 import secrets
+import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
@@ -39,6 +40,7 @@ from app.services.notifications.email import (
     send_password_changed_email,
 )
 from app.middleware.audit import log_action
+from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 bearer = HTTPBearer(auto_error=False)
@@ -329,6 +331,38 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "is_verified": current_user.is_verified,
         "is_superadmin": current_user.is_superadmin,
         "created_at": current_user.created_at,
+    }
+
+
+@router.get("/me/balance")
+async def get_my_balance(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Wallet).where(Wallet.user_id == current_user.id))
+    wallet = result.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    if not settings.GENLAYER_RPC_URL:
+        raise HTTPException(status_code=500, detail="GenLayer RPC is not configured")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            settings.GENLAYER_RPC_URL,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "eth_getBalance",
+                "params": [wallet.address, "latest"],
+            },
+        )
+    data = resp.json()
+    wei = int(data.get("result") or "0x0", 16)
+    gen = wei / 10**18
+    return {
+        "wallet_address": wallet.address,
+        "balance_wei": str(wei),
+        "balance_gen": f"{gen:.18f}".rstrip("0").rstrip("."),
     }
 
 

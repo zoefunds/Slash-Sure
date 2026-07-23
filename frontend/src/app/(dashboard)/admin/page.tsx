@@ -1,15 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { authApi, operatorsApi, incidentsApi, adminApi } from "@/lib/api";
-import { Shield, Users, AlertTriangle, Activity, BarChart3, UserCheck } from "lucide-react";
+import { Shield, Users, AlertTriangle, BarChart3, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AdminPage() {
-  const user = useAuthStore((s) => s.user);
   const router = useRouter();
 
   // Fetch current user to get fresh is_superadmin flag

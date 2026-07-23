@@ -1,9 +1,27 @@
+# v0.2.16
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 from genlayer import *
 
 import json
 import hashlib
+
+
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+def _send_gen(to_address: str, amount: u256) -> None:
+    if not to_address:
+        raise gl.vm.UserError("Missing recipient address")
+    if amount <= u256(0):
+        raise gl.vm.UserError("Transfer amount must be positive")
+    _Recipient(Address(to_address)).emit_transfer(value=amount)
 
 
 # ─── SlashSure Intelligent Contract ───────────────────────────────────────────
@@ -98,6 +116,9 @@ class SlashSureContract(gl.Contract):
     total_cases: u256
     total_claims: u256
     total_payouts_amount: u256
+    total_staked_wei: u256
+    total_slashed_wei: u256
+    claim_pool_wei: u256
     audit_count: u256
 
     # Governable parameters
@@ -116,6 +137,9 @@ class SlashSureContract(gl.Contract):
         self.total_cases = u256(0)
         self.total_claims = u256(0)
         self.total_payouts_amount = u256(0)
+        self.total_staked_wei = u256(0)
+        self.total_slashed_wei = u256(0)
+        self.claim_pool_wei = u256(0)
         self.audit_count = u256(0)
         self.min_confidence_slash = u256(70)
         self.min_confidence_claim = u256(55)
@@ -186,11 +210,32 @@ class SlashSureContract(gl.Contract):
         except Exception:
             return default
 
+    def _state_u256(self, data: dict, key: str) -> u256:
+        try:
+            return u256(int(data.get(key, "0")))
+        except Exception:
+            return u256(0)
+
+    def _fetch_text(self, url: str) -> str:
+        if not url:
+            return ""
+
+        def fetch() -> str:
+            response = gl.nondet.web.get(url)
+            status = getattr(response, "status_code", getattr(response, "status", 200))
+            if status >= 400 and status < 500:
+                raise gl.vm.UserError("Evidence source returned client error")
+            if status >= 500:
+                raise gl.vm.UserError("Evidence source temporarily unavailable")
+            return response.body.decode("utf-8")[:2000]
+
+        return gl.eq_principle.strict_eq(fetch)
+
     # ══════════════════════════════════════════════════════════════════════════
     # OPERATOR MANAGEMENT
     # ══════════════════════════════════════════════════════════════════════════
 
-    @gl.public.write
+    @gl.public.write.payable
     def register_operator(
         self,
         address: str,
@@ -202,13 +247,20 @@ class SlashSureContract(gl.Contract):
         self._not_paused()
         assert address not in self.operators, "Operator already registered"
         assert len(name) > 0, "Name is required"
+        expected_stake = u256(total_stake)
+        if expected_stake <= u256(0):
+            raise gl.vm.UserError("Stake must be positive")
+        if gl.message.value != expected_stake:
+            raise gl.vm.UserError("Must stake exactly total_stake wei")
 
         op = {
             "address": address,
             "name": name,
             "network": network,
             "status": "active",
-            "total_stake": total_stake,
+            "total_stake": str(gl.message.value),
+            "staked_wei": str(gl.message.value),
+            "slashed_wei": "0",
             "slash_count": 0,
             "reputation_score": 100,
             "reliability_score": 100,
@@ -226,16 +278,26 @@ class SlashSureContract(gl.Contract):
         self.operator_cases[address] = ""
         self.operator_claims[address] = ""
         self.total_operators = u256(int(self.total_operators) + 1)
+        self.total_staked_wei = self.total_staked_wei + gl.message.value
         self._audit("operator_registered", gl.message.sender_address.as_hex, address)
         return address
 
-    @gl.public.write
+    @gl.public.write.payable
     def update_operator_stake(self, address: str, new_stake: int) -> bool:
         self._not_paused()
         op = self._get_operator(address)
-        op["total_stake"] = new_stake
+        additional_stake = u256(new_stake)
+        if additional_stake <= u256(0):
+            raise gl.vm.UserError("Stake increase must be positive")
+        if gl.message.value != additional_stake:
+            raise gl.vm.UserError("Must stake exactly new_stake wei")
+        current = self._state_u256(op, "staked_wei")
+        updated = current + gl.message.value
+        op["total_stake"] = str(updated)
+        op["staked_wei"] = str(updated)
         op["last_updated"] = 0
         self._set_operator(op)
+        self.total_staked_wei = self.total_staked_wei + gl.message.value
         self._audit("operator_stake_updated", gl.message.sender_address.as_hex, address)
         return True
 
@@ -329,6 +391,42 @@ class SlashSureContract(gl.Contract):
         self.total_incidents = u256(int(self.total_incidents) + 1)
         self._append_index(self.operator_incidents, operator_address, incident_id)
         self._audit("evidence_submitted", gl.message.sender_address.as_hex, incident_id)
+        return incident_id
+
+    @gl.public.write
+    def fetch_and_submit_evidence(
+        self,
+        incident_id: str,
+        operator_address: str,
+        violation_type: str,
+        network: str,
+        block_number: int,
+        evidence_url: str,
+    ) -> str:
+        self._not_paused()
+        assert len(incident_id) > 0, "incident_id required"
+        assert len(evidence_url) > 0, "evidence_url required"
+
+        fetched = self._fetch_text(evidence_url)
+        summary_hash = self._hash({"url": evidence_url, "content": fetched})
+        pkg = {
+            "incident_id": incident_id,
+            "operator_address": operator_address,
+            "violation_type": violation_type,
+            "network": network,
+            "block_number": block_number,
+            "merkle_root": summary_hash,
+            "evidence_count": 1,
+            "evidence_summary_hash": summary_hash,
+            "evidence_url": evidence_url,
+            "web_evidence_preview": fetched[:500],
+            "submitted_by": gl.message.sender_address.as_hex,
+            "timestamp": 0,
+        }
+        self.evidence_packages[incident_id] = json.dumps(pkg)
+        self.total_incidents = u256(int(self.total_incidents) + 1)
+        self._append_index(self.operator_incidents, operator_address, incident_id)
+        self._audit("web_evidence_submitted", gl.message.sender_address.as_hex, incident_id)
         return incident_id
 
     @gl.public.view
@@ -516,7 +614,7 @@ Return ONLY valid JSON, no markdown fences:
         fp    = case["fault_probability"]
         sv    = case["severity_score"]
         cf    = case["confidence_score"]
-        stake = case["stake_at_risk"]
+        stake = int(case["stake_at_risk"])
 
         # Compute slash_bps deterministically from fault_probability and severity_score
         if cf < 60:
@@ -613,24 +711,39 @@ Return ONLY valid JSON, no markdown fences:
         self._only_owner()
         case = self._get_case(case_id)
         assert case["stage"] == "approved", "Must be approved"
+        slash_amount = u256(actual_slash_amount)
+        if slash_amount <= u256(0):
+            raise gl.vm.UserError("Slash amount must be positive")
 
-        case["executed_amount"] = actual_slash_amount
+        op = self._get_operator(case["operator_address"])
+        staked = self._state_u256(op, "staked_wei")
+        if staked <= u256(0):
+            raise gl.vm.UserError("No operator stake deposited")
+        if slash_amount > staked:
+            raise gl.vm.UserError("Slash exceeds deposited stake")
+
+        remaining = staked - slash_amount
+        case["executed_amount"] = str(slash_amount)
         case["stage"] = "executed"
         case["resolved_block"] = 0
         self._set_case(case)
 
-        op = self._get_operator(case["operator_address"])
         op["status"] = "slashed"
         op["slash_count"] = op.get("slash_count", 0) + 1
-        op["total_stake"] = max(0, op.get("total_stake", 0) - actual_slash_amount)
+        op["total_stake"] = str(remaining)
+        op["staked_wei"] = str(remaining)
+        op["slashed_wei"] = str(self._state_u256(op, "slashed_wei") + slash_amount)
         penalty = 15 + op["slash_count"] * 5
         op["reputation_score"] = max(0, op.get("reputation_score", 100) - penalty)
         op["last_updated"] = 0
         self._set_operator(op)
+        self.total_staked_wei = self.total_staked_wei - slash_amount
+        self.total_slashed_wei = self.total_slashed_wei + slash_amount
 
         self._audit("slashing_executed", gl.message.sender_address.as_hex, case_id)
+        _send_gen(self.owner, slash_amount)
         return json.dumps({"case_id": case_id, "stage": "executed",
-                           "executed_amount": actual_slash_amount})
+                           "executed_amount": str(slash_amount)})
 
     @gl.public.write
     def appeal_slashing(self, case_id: str, rationale_hash: str) -> str:
@@ -745,6 +858,15 @@ Return ONLY valid JSON, no markdown fences:
     # INSURANCE CLAIMS
     # ══════════════════════════════════════════════════════════════════════════
 
+    @gl.public.write.payable
+    def fund_claim_pool(self) -> str:
+        self._not_paused()
+        if gl.message.value <= u256(0):
+            raise gl.vm.UserError("Claim pool funding must be positive")
+        self.claim_pool_wei = self.claim_pool_wei + gl.message.value
+        self._audit("claim_pool_funded", gl.message.sender_address.as_hex, str(gl.message.value))
+        return json.dumps({"claim_pool_wei": str(self.claim_pool_wei)})
+
     @gl.public.write
     def submit_claim(
         self,
@@ -767,6 +889,7 @@ Return ONLY valid JSON, no markdown fences:
             "claimant_address": claimant_address,
             "coverage_amount": coverage_amount,
             "claimed_amount": claimed_amount,
+            "approved_deposited": "0",
             "assessed_damage": 0,
             "approved_amount": 0,
             "status": "submitted",
@@ -862,6 +985,7 @@ Return ONLY valid JSON, no markdown fences:
         claim["ai_eligible"]       = eligible
         claim["assessed_damage"]   = assessed
         claim["approved_amount"]   = approved
+        claim["approved_deposited"] = str(approved)
         claim["ai_confidence"]     = conf
         claim["adjudication_hash"] = adj_hash
         claim["on_chain_hash"]     = status_hash
@@ -890,30 +1014,41 @@ Return ONLY valid JSON, no markdown fences:
         assert payout_id not in self.payouts, "Payout already exists"
         assert amount <= claim["approved_amount"], "Exceeds approved amount"
         assert amount > 0, "Amount must be positive"
+        payout_amount = u256(amount)
+        approved_deposited = self._state_u256(claim, "approved_deposited")
+        if approved_deposited <= u256(0):
+            raise gl.vm.UserError("No approved claim balance")
+        if payout_amount > approved_deposited:
+            raise gl.vm.UserError("Payout exceeds approved claim balance")
+        if payout_amount > self.claim_pool_wei:
+            raise gl.vm.UserError("Claim pool has insufficient GEN")
 
         approval_hash = self._hash({"claim_id": claim_id, "payout_id": payout_id,
                                      "amount": amount, "recipient": recipient_address,
                                      "block": 0})
+        claim["approved_deposited"] = str(approved_deposited - payout_amount)
+        claim["status"] = "paid"
+        self._set_claim(claim)
+        self.claim_pool_wei = self.claim_pool_wei - payout_amount
+        self.total_payouts_amount = self.total_payouts_amount + payout_amount
+
         payout = {
             "payout_id": payout_id,
             "claim_id": claim_id,
-            "amount": amount,
+            "amount": str(payout_amount),
             "recipient_address": recipient_address,
             "token": "GEN",
-            "status": "authorized",
+            "status": "completed",
             "approval_hash": approval_hash,
             "initiated_block": 0,
             "completed_block": 0,
         }
         self.payouts[payout_id] = json.dumps(payout)
-        self.total_payouts_amount = u256(int(self.total_payouts_amount) + amount)
-
-        claim["status"] = "paid"
-        self._set_claim(claim)
         self._audit("payout_authorized", gl.message.sender_address.as_hex, payout_id)
+        _send_gen(recipient_address, payout_amount)
 
         return json.dumps({"payout_id": payout_id, "approval_hash": approval_hash,
-                           "status": "authorized"})
+                           "status": "completed", "amount": str(payout_amount)})
 
     @gl.public.write
     def complete_payout(self, payout_id: str, tx_hash: str) -> str:
@@ -1352,6 +1487,9 @@ Return ONLY valid JSON, no markdown fences:
             "total_cases": int(self.total_cases),
             "total_claims": int(self.total_claims),
             "total_payouts_amount": int(self.total_payouts_amount),
+            "total_staked_wei": str(self.total_staked_wei),
+            "total_slashed_wei": str(self.total_slashed_wei),
+            "claim_pool_wei": str(self.claim_pool_wei),
             "audit_count": int(self.audit_count),
             "min_confidence_slash": int(self.min_confidence_slash),
             "min_confidence_claim": int(self.min_confidence_claim),

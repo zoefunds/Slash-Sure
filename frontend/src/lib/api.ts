@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://slashsure-backend-prod.fly.dev";
 
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -62,6 +62,7 @@ export const authApi = {
     api.post("/auth/reset-password", { token, new_password }),
   updateProfile: (data: { full_name?: string }) =>
     api.patch("/auth/me", data),
+  balance: () => api.get("/auth/me/balance"),
 };
 
 // Admin
@@ -85,6 +86,8 @@ export const incidentsApi = {
   create: (data: Record<string, unknown>) => api.post("/incidents/", data),
   addEvidence: (id: string, data: Record<string, unknown>) =>
     api.post(`/incidents/${id}/evidence`, data),
+  addWebEvidence: (id: string, data: Record<string, unknown>) =>
+    api.post(`/incidents/${id}/web-evidence`, data),
 };
 
 // Slashing
@@ -129,7 +132,7 @@ export const riskApi = {
 };
 
 // GenLayer on-chain — all calls go to StudioNet which can be slow
-export const CONTRACT_ADDRESS = "0x9A91eBfC28832E70c541De5EF46BE99714691922";
+export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS || "0x444250D147c58a19f4e8CA43527e37F327441eF8";
 
 export const genlayerApi = {
   // 12s timeout — StudioNet can be slow; callers should handle rejection gracefully
@@ -143,4 +146,3 @@ export const genlayerApi = {
   vote: (proposalId: string, vote: boolean) =>
     api.post(`/genlayer/proposals/${proposalId}/vote`, { vote }, { timeout: 20000 }),
 };
-

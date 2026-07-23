@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -23,6 +24,16 @@ class SlashingCaseCreate(BaseModel):
     violation_type: str
     network: str
     stake_at_risk: float
+
+
+def _gen_to_wei(value: float | int | str) -> int:
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise HTTPException(status_code=400, detail="Invalid GEN amount") from exc
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Stake must be positive")
+    return int(amount * Decimal("1000000000000000000"))
 
 
 class SlashingApproval(BaseModel):
@@ -109,7 +120,7 @@ async def create_slashing_case(
         body.incident_id,
         body.violation_type,
         body.network,
-        int(body.stake_at_risk),
+        _gen_to_wei(body.stake_at_risk),
         str(current_user.id),
     )
 
@@ -143,6 +154,7 @@ async def _create_and_recommend_slashing(
                 "register_operator",
                 [operator_address, operator_address, network, stake_at_risk, ""],
                 signer_private_key=signer_key,
+                value=stake_at_risk,
             )
             if reg.get("tx_hash"):
                 await poll_until_finalized(reg["tx_hash"], "register_operator")
@@ -153,8 +165,8 @@ async def _create_and_recommend_slashing(
     for attempt in range(3):
         cr = await genlayer_client.send_transaction(
             "create_slashing_case",
-            [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
-            signer_private_key=signer_key,
+                [case_id, operator_address, incident_id, violation_type, network, stake_at_risk],
+                signer_private_key=signer_key,
         )
         if not cr.get("tx_hash"):
             logger.error(f"create_slashing_case send failed ({case_id}): {cr}")

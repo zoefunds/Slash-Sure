@@ -5,9 +5,9 @@
 Powered by [GenLayer](https://genlayer.com) Intelligent Contracts on StudioNet.
 
 - **Live App:** https://slash-sure.vercel.app
-- **API:** https://slashsure-api.fly.dev
-- **API Docs:** https://slashsure-api.fly.dev/api/docs
-- **Intelligent Contract:** `0x9A91eBfC28832E70c541De5EF46BE99714691922` on GenLayer StudioNet
+- **API:** https://slashsure-backend-prod.fly.dev
+- **API Docs:** https://slashsure-backend-prod.fly.dev/api/docs
+- **Intelligent Contract:** `0x444250D147c58a19f4e8CA43527e37F327441eF8` on GenLayer StudioNet
 
 ---
 
@@ -60,7 +60,7 @@ A superadmin-only dashboard gives full system visibility: all users, operators, 
                  │ REST + WebSockets
 ┌────────────────▼────────────────────────┐
 │   Backend (FastAPI → Fly.io)            │
-│   slashsure-api.fly.dev                 │
+│   slashsure-backend-prod.fly.dev        │
 │   - PostgreSQL (persistent data)        │
 │   - Redis (pub/sub, caching)            │
 │   - Background monitoring worker       │
@@ -70,7 +70,7 @@ A superadmin-only dashboard gives full system visibility: all users, operators, 
 ┌────────────────▼────────────────────────┐
 │   GenLayer StudioNet                    │
 │   Intelligent Contract                  │
-│   0x9A91eBfC28832E70c541De5EF46BE99714691922 │
+│   0x444250D147c58a19f4e8CA43527e37F327441eF8 │
 │   - register_operator                   │
 │   - analyze_incident (AI)               │
 │   - execute_slash                       │
@@ -167,7 +167,7 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## Deploy Intelligent Contract
 
-1. Open [GenLayer Studio](https://studio.genlayer.com)
+1. Open [GenLayer Studio](https://explorer-studio.genlayer.com/)
 2. Upload `intelligent-contracts/slash_sure.py`
 3. Deploy to StudioNet
 4. Copy the deployed contract address

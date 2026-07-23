@@ -11,13 +11,15 @@ function VerifyEmailContent() {
   const router = useRouter();
   const token = params.get("token");
 
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    token ? "loading" : "error"
+  );
+  const [message, setMessage] = useState(
+    token ? "" : "No verification token found."
+  );
 
   useEffect(() => {
     if (!token) {
-      setStatus("error");
-      setMessage("No verification token found.");
       return;
     }
     authApi.verifyEmail(token)

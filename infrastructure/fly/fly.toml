@@ -1,4 +1,4 @@
-app = "slashsure-backend"
+app = "slashsure-backend-prod"
 primary_region = "iad"
 
 [build]

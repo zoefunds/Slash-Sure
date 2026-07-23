@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         url = self.DATABASE_SYNC_URL or self.DATABASE_URL
+        if "localhost" in url and self.DATABASE_URL:
+            url = self.DATABASE_URL
         url = url.replace("postgresql+asyncpg://", "postgresql://")
         url = url.replace("postgres://", "postgresql://")
         return url
@@ -69,7 +71,7 @@ class Settings(BaseSettings):
     SLACK_DEFAULT_CHANNEL: str = "#slashsure-alerts"
 
     # Frontend URL (for email links)
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "https://slash-sure.vercel.app"
 
     # Network RPCs
     ETHEREUM_RPC_URL: str = ""
@@ -78,7 +80,8 @@ class Settings(BaseSettings):
     BABYLON_RPC_URL: str = "https://rpc.babylonchain.io"
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000"
+    ALLOWED_ORIGINS: str = "https://slash-sure.vercel.app"
+    ALLOWED_ORIGIN_REGEX: str = ""
 
     @property
     def cors_origins(self) -> List[str]:

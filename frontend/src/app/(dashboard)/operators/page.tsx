@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { operatorsApi } from "@/lib/api";
+import { authApi, operatorsApi } from "@/lib/api";
 import { cn, formatNumber, statusColor, truncateAddress } from "@/lib/utils";
-import { Users, Plus, X, Loader2 } from "lucide-react";
+import { Users, Plus, X, Loader2, Wallet } from "lucide-react";
 
 interface OperatorForm {
   name: string;
@@ -25,12 +25,25 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
     total_stake: "", commission_rate: "0", description: "", website: "",
   });
   const [error, setError] = useState("");
+  const [txResult, setTxResult] = useState<{ tx_hash?: string | null; status?: string } | null>(null);
+
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: () => authApi.balance().then((r) => r.data),
+  });
+
+  const stakeGen = Number(form.total_stake || 0);
+  const balanceGen = Number(balanceData?.balance_gen || 0);
+  const insufficientBalance = stakeGen > 0 && balanceData && stakeGen > balanceGen;
 
   const mutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => operatorsApi.create(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["operators"] });
-      onClose();
+      setTxResult(res.data?.on_chain || null);
+      if (res.data?.on_chain?.status === "finalized" || res.data?.on_chain?.status === "already_registered") {
+        setTimeout(onClose, 1200);
+      }
     },
     onError: (err: unknown) => {
       const e = err as { response?: { data?: { detail?: string } } };
@@ -41,6 +54,10 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
   const handleSubmit = (ev: React.FormEvent) => {
     ev.preventDefault();
     setError("");
+    if (insufficientBalance) {
+      setError("Your GEN balance is lower than the stake amount.");
+      return;
+    }
     mutation.mutate({
       name: form.name,
       address: form.address,
@@ -56,6 +73,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
     <div>
       <label className="block text-sm font-medium mb-1.5">{label}</label>
       <input
+        required
         type={type}
         value={form[key]}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
@@ -75,9 +93,28 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        <div className="mb-4 rounded-lg border border-border bg-secondary/40 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Wallet balance</span>
+          </div>
+          <div className="text-sm font-medium">
+            {balanceLoading ? "Loading…" : `${balanceGen.toLocaleString(undefined, { maximumFractionDigits: 6 })} GEN`}
+          </div>
+        </div>
+
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
             {error}
+          </div>
+        )}
+
+        {txResult && (
+          <div className="mb-4 p-3 rounded-lg border border-border bg-secondary/40 text-sm space-y-1">
+            <div className="font-medium">On-chain status: {txResult.status || "pending"}</div>
+            <div className="text-muted-foreground break-all">
+              {txResult.tx_hash ? `Tx: ${txResult.tx_hash}` : "Transaction submitted without a hash."}
+            </div>
           </div>
         )}
 
@@ -88,6 +125,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="block text-sm font-medium mb-1.5">Network</label>
             <select
+              required
               value={form.network}
               onChange={(e) => setForm((f) => ({ ...f, network: e.target.value }))}
               className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
@@ -103,8 +141,14 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
             {field("commission_rate", "Commission (%)", "e.g. 5", "number")}
           </div>
 
-          {field("description", "Description (optional)", "Brief description")}
-          {field("website", "Website (optional)", "https://")}
+          {insufficientBalance && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Stake exceeds wallet balance. Add funds or lower the GEN amount before submitting.
+            </div>
+          )}
+
+          {field("description", "Description *", "Brief description")}
+          {field("website", "Website *", "https://")}
 
           <div className="flex gap-3 pt-2">
             <button
@@ -116,7 +160,7 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || insufficientBalance}
               className="flex-1 py-2.5 rounded-lg bg-foreground text-background disabled:opacity-50 hover:opacity-85 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
             >
               {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}

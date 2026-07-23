@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Settings, Wallet, Bell, Key, Copy, Check, Save, Pencil, X } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,10 @@ export default function SettingsPage() {
     weekly_digest: false,
   });
   const [savedNotifs, setSavedNotifs] = useState(false);
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: () => authApi.balance().then((r) => r.data),
+  });
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +124,13 @@ export default function SettingsPage() {
           <label className="text-sm text-muted-foreground">Wallet Address</label>
           <div className="mt-1 font-mono text-sm bg-secondary px-4 py-3 rounded-lg">
             {user?.wallet_address || "—"}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label className="text-sm text-muted-foreground">GEN Balance</label>
+          <div className="mt-1 font-medium">
+            {balanceLoading ? "Loading…" : `${balanceData?.balance_gen || "0"} GEN`}
           </div>
         </div>
 

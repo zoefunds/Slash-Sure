@@ -31,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           localStorage.setItem("access_token", access_token);
           localStorage.setItem("refresh_token", refresh_token);
+          window.dispatchEvent(new Event("slashsure-auth-change"));
         }
         set({
           accessToken: access_token,
@@ -43,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
+          window.dispatchEvent(new Event("slashsure-auth-change"));
         }
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },

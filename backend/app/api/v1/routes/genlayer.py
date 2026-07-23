@@ -16,8 +16,6 @@ from app.services.genlayer.signer import get_user_private_key
 
 router = APIRouter(prefix="/genlayer", tags=["GenLayer"])
 
-CONTRACT_ADDRESS = "0x9A91eBfC28832E70c541De5EF46BE99714691922"
-
 
 # ── Global Stats ──────────────────────────────────────────────────────────────
 
@@ -28,7 +26,7 @@ async def get_contract_stats(current_user: User = Depends(get_current_user)):
     except asyncio.TimeoutError:
         stats = None
     return {
-        "contract_address": CONTRACT_ADDRESS,
+        "contract_address": genlayer_client.contract_address,
         "network": "StudioNet",
         "reachable": stats is not None,
         **(stats or {}),

@@ -22,8 +22,10 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     title: "", network: "eigenlayer", severity: "medium",
     incident_type: "protocol_violation", operator_address: "", description: "",
+    evidence_url: "", evidence_title: "", evidence_block_number: "",
   });
   const [error, setError] = useState("");
+  const [txResult, setTxResult] = useState<{ tx_hash?: string; status?: string } | null>(null);
 
   const { data: operators } = useQuery({
     queryKey: ["operators"],
@@ -31,10 +33,30 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
   });
 
   const mutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => incidentsApi.create(data),
-    onSuccess: () => {
+    mutationFn: async (data: Record<string, unknown>) => {
+      const created = await incidentsApi.create(data);
+      return created;
+    },
+    onSuccess: async (res, variables) => {
       qc.invalidateQueries({ queryKey: ["incidents"] });
-      onClose();
+      setTxResult(null);
+      const incidentId = res.data?.id as string | undefined;
+      if (!incidentId) {
+        onClose();
+        return;
+      }
+      const webEvidence = await incidentsApi.addWebEvidence(incidentId, {
+        incident_type: variables.incident_type,
+        network: variables.network,
+        title: variables.evidence_title,
+        evidence_url: variables.evidence_url,
+        operator_address: variables.operator_address,
+        block_number: variables.evidence_block_number ? Number(variables.evidence_block_number) : undefined,
+        description: variables.description,
+      });
+      setTxResult(webEvidence.data?.on_chain || null);
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      setTimeout(onClose, 1200);
     },
     onError: (err: unknown) => {
       const e = err as { response?: { data?: { detail?: string } } };
@@ -50,8 +72,11 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
       network: form.network,
       severity: form.severity,
       incident_type: form.incident_type,
-      operator_address: form.operator_address || undefined,
-      description: form.description || undefined,
+      operator_address: form.operator_address,
+      description: form.description,
+      evidence_url: form.evidence_url,
+      evidence_title: form.evidence_title,
+      evidence_block_number: form.evidence_block_number,
     });
   };
 
@@ -70,6 +95,11 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
         )}
+        {txResult?.tx_hash && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+            On-chain tx {txResult.tx_hash} finalized as {txResult.status || "pending"}.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -86,6 +116,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="block text-sm font-medium mb-1.5">Incident Type *</label>
             <select
+              required
               value={form.incident_type}
               onChange={(e) => setForm(f => ({ ...f, incident_type: e.target.value }))}
               className={inputCls}
@@ -98,6 +129,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
             <div>
               <label className="block text-sm font-medium mb-1.5">Network *</label>
               <select
+                required
                 value={form.network}
                 onChange={(e) => setForm(f => ({ ...f, network: e.target.value }))}
                 className={inputCls}
@@ -108,6 +140,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
             <div>
               <label className="block text-sm font-medium mb-1.5">Severity *</label>
               <select
+                required
                 value={form.severity}
                 onChange={(e) => setForm(f => ({ ...f, severity: e.target.value }))}
                 className={inputCls}
@@ -118,8 +151,9 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1.5">Operator (optional)</label>
+            <label className="block text-sm font-medium mb-1.5">Operator *</label>
             <select
+              required
               value={form.operator_address}
               onChange={(e) => setForm(f => ({ ...f, operator_address: e.target.value }))}
               className={inputCls}
@@ -132,13 +166,49 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1.5">Description</label>
+            <label className="block text-sm font-medium mb-1.5">Description *</label>
             <textarea
+              required
               value={form.description}
               onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
               placeholder="Describe the violation in detail…"
               rows={3}
               className={inputCls + " resize-none"}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Evidence Title *</label>
+            <input
+              required
+              value={form.evidence_title}
+              onChange={(e) => setForm(f => ({ ...f, evidence_title: e.target.value }))}
+              placeholder="e.g. validator dashboard snapshot"
+              className={inputCls}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Evidence URL *</label>
+            <input
+              required
+              value={form.evidence_url}
+              onChange={(e) => setForm(f => ({ ...f, evidence_url: e.target.value }))}
+              placeholder="https://..."
+              className={inputCls}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Evidence Block Number *</label>
+            <input
+              required
+              type="number"
+              min="0"
+              value={form.evidence_block_number}
+              onChange={(e) => setForm(f => ({ ...f, evidence_block_number: e.target.value }))}
+              placeholder="e.g. 1234567"
+              className={inputCls}
             />
           </div>
 
@@ -150,7 +220,7 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
             <button type="submit" disabled={mutation.isPending}
               className="flex-1 py-2.5 rounded-lg bg-foreground text-background disabled:opacity-50 text-sm font-semibold hover:opacity-85 transition-opacity flex items-center justify-center gap-2">
               {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mutation.isPending ? "Reporting…" : "Report Incident"}
+              {mutation.isPending ? "Reporting…" : "Report + Evidence"}
             </button>
           </div>
         </form>

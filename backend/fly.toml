@@ -1,4 +1,4 @@
-app = "slashsure-api"
+app = "slashsure-backend-prod"
 primary_region = "iad"
 
 [build]
@@ -12,7 +12,7 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = "60"
 REFRESH_TOKEN_EXPIRE_DAYS = "30"
 GENLAYER_RPC_URL = "https://studio.genlayer.com/api"
-GENLAYER_CONTRACT_ADDRESS = "0x9A91eBfC28832E70c541De5EF46BE99714691922"
+GENLAYER_CONTRACT_ADDRESS = "0x444250D147c58a19f4e8CA43527e37F327441eF8"
 BREVO_SENDER_NAME = "SlashSure"
 SLACK_DEFAULT_CHANNEL = "#slashsure-alerts"
 COSMOS_RPC_URL = "https://rpc.cosmos.network"
