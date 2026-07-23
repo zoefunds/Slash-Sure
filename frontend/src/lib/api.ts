@@ -76,6 +76,8 @@ export const operatorsApi = {
     api.get("/operators/", { params }),
   get: (id: string) => api.get(`/operators/${id}/`),
   create: (data: Record<string, unknown>) => api.post("/operators/", data),
+  updateStake: (id: string, data: { new_stake: number }) =>
+    api.post(`/operators/${id}/stake`, data),
 };
 
 // Incidents
@@ -109,6 +111,8 @@ export const insuranceApi = {
     api.post("/insurance/claims", data),
   payout: (id: string, data: { amount: number; recipient_address: string }) =>
     api.post(`/insurance/claims/${id}/payout`, data),
+  fundClaimPool: (data: { amount: number }) =>
+    api.post("/insurance/claim-pool/fund", data),
 };
 
 // Monitoring

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CONTRACT_ADDRESS, authApi, operatorsApi } from "@/lib/api";
 import { cn, formatNumber, statusColor, truncateAddress } from "@/lib/utils";
-import { Users, Plus, X, Loader2, Wallet, ArrowRight } from "lucide-react";
+import { Users, Plus, X, Loader2, Wallet, ArrowRight, PencilLine } from "lucide-react";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 interface OperatorForm {
@@ -174,8 +174,126 @@ function AddOperatorModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function UpdateStakeModal({
+  operator,
+  onClose,
+}: {
+  operator: { id: string; name: string; address: string; total_stake?: number };
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [newStake, setNewStake] = useState(String(operator.total_stake ?? ""));
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: () => authApi.balance().then((r) => r.data),
+  });
+
+  const balanceGen = Number(balanceData?.balance_gen || 0);
+  const stakeGen = Number(newStake || 0);
+  const insufficientBalance = stakeGen > 0 && balanceData && stakeGen > balanceGen;
+
+  const mutation = useMutation({
+    mutationFn: () => operatorsApi.updateStake(operator.id, { new_stake: stakeGen }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["operators", CONTRACT_ADDRESS] });
+      qc.invalidateQueries({ queryKey: ["operator-detail", CONTRACT_ADDRESS, operator.id] });
+      setDone(true);
+      setTimeout(onClose, 1000);
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setError(e?.response?.data?.detail || "Failed to update operator stake");
+    },
+  });
+
+  const handleSubmit = (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setError("");
+    if (insufficientBalance) {
+      setError("Your GEN balance is lower than the new stake amount.");
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold">Update Operator Stake</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
+          <div className="font-medium">{operator.name}</div>
+          <div className="text-muted-foreground font-mono break-all">{operator.address}</div>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-border bg-secondary/40 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Wallet balance</span>
+          </div>
+          <div className="text-sm font-medium">
+            {balanceLoading ? "Loading…" : `${balanceGen.toLocaleString(undefined, { maximumFractionDigits: 6 })} GEN`}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        {done && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+            Stake update submitted and finalized on-chain.
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">New Stake (GEN)</label>
+            <input
+              required
+              type="number"
+              min="0"
+              value={newStake}
+              onChange={(e) => setNewStake(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
+            />
+          </div>
+
+          {insufficientBalance && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Your GEN balance is lower than the requested stake.
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={mutation.isPending || insufficientBalance}
+              className="flex-1 py-2.5 rounded-lg bg-foreground text-background disabled:opacity-50 hover:opacity-85 text-sm font-semibold transition-colors">
+              {mutation.isPending ? "Updating…" : "Update Stake"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function OperatorsPage() {
   const [showModal, setShowModal] = useState(false);
+  const [showStakeModal, setShowStakeModal] = useState(false);
   const [network, setNetwork] = useState("");
   const [page, setPage] = useState(1);
   const [selectedOperatorId, setSelectedOperatorId] = useState<string | null>(null);
@@ -200,6 +318,17 @@ export default function OperatorsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {showModal && <AddOperatorModal onClose={() => setShowModal(false)} />}
+      {showStakeModal && selectedOperator && (
+        <UpdateStakeModal
+          operator={{
+            id: selectedOperator.id,
+            name: selectedOperator.name,
+            address: selectedOperator.address,
+            total_stake: selectedOperator.total_stake,
+          }}
+          onClose={() => setShowStakeModal(false)}
+        />
+      )}
 
       <div className="flex items-center justify-between">
         <div>
@@ -339,6 +468,16 @@ export default function OperatorsPage() {
         title={selectedOperator?.name || selectedOperatorRow?.name || "Operator details"}
         subtitle={selectedOperator?.address ? truncateAddress(selectedOperator.address, 8) : selectedOperatorRow?.address ? truncateAddress(selectedOperatorRow.address, 8) : undefined}
         isLoading={selectedOperatorId !== null && !selectedOperator && !!selectedOperatorRow}
+        actions={selectedOperator ? (
+          <button
+            type="button"
+            onClick={() => setShowStakeModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-secondary transition-colors"
+          >
+            <PencilLine className="w-4 h-4" />
+            Update Stake
+          </button>
+        ) : undefined}
         sections={[
           { label: "Name", value: selectedOperator?.name ?? selectedOperatorRow?.name },
           { label: "Address", value: selectedOperator?.address ?? selectedOperatorRow?.address },

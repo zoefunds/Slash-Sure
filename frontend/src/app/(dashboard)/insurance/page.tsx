@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CONTRACT_ADDRESS, insuranceApi, incidentsApi } from "@/lib/api";
+import { CONTRACT_ADDRESS, authApi, insuranceApi, incidentsApi } from "@/lib/api";
 import { cn, formatDateTime, formatNumber, statusColor } from "@/lib/utils";
-import { FileText, Plus, X, Loader2, CheckCircle, ArrowRight } from "lucide-react";
+import { FileText, Plus, X, Loader2, CheckCircle, ArrowRight, Droplets, Wallet } from "lucide-react";
 import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 interface ClaimForm {
@@ -183,8 +183,114 @@ function SubmitClaimModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function FundClaimPoolModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const { data: balanceData, isLoading: balanceLoading } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: () => authApi.balance().then((r) => r.data),
+  });
+
+  const balanceGen = Number(balanceData?.balance_gen || 0);
+  const amountGen = Number(amount || 0);
+  const insufficientBalance = amountGen > 0 && balanceData && amountGen > balanceGen;
+
+  const mutation = useMutation({
+    mutationFn: () => insuranceApi.fundClaimPool({ amount: amountGen }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["insurance-claims", CONTRACT_ADDRESS] });
+      setDone(true);
+      setTimeout(onClose, 1000);
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setError(e?.response?.data?.detail || "Failed to fund claim pool");
+    },
+  });
+
+  const handleSubmit = (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setError("");
+    if (insufficientBalance) {
+      setError("Your GEN balance is lower than the funding amount.");
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold">Fund Claim Pool</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-border bg-secondary/40 p-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Wallet balance</span>
+          </div>
+          <div className="text-sm font-medium">
+            {balanceLoading ? "Loading…" : `${balanceGen.toLocaleString(undefined, { maximumFractionDigits: 6 })} GEN`}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        {done && (
+          <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+            Claim pool funding submitted and finalized on-chain.
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Funding Amount (GEN)</label>
+            <input
+              required
+              type="number"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/15 text-sm"
+            />
+          </div>
+
+          {insufficientBalance && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              Your GEN balance is lower than the funding amount.
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-secondary/50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={mutation.isPending || insufficientBalance}
+              className="flex-1 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold transition-colors">
+              {mutation.isPending ? "Funding…" : "Fund Pool"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function InsurancePage() {
   const [showModal, setShowModal] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
@@ -212,6 +318,7 @@ export default function InsurancePage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {showModal && <SubmitClaimModal onClose={() => setShowModal(false)} />}
+      {showFundModal && <FundClaimPoolModal onClose={() => setShowFundModal(false)} />}
 
       <div className="flex items-center justify-between">
         <div>
@@ -223,6 +330,12 @@ export default function InsurancePage() {
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" /> Submit Claim
+        </button>
+        <button
+          onClick={() => setShowFundModal(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-border text-sm font-medium rounded-lg hover:bg-secondary/50 transition-colors"
+        >
+          <Droplets className="w-4 h-4" /> Fund Claim Pool
         </button>
       </div>
 

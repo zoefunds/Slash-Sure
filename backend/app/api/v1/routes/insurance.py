@@ -51,6 +51,10 @@ class PayoutRequest(BaseModel):
     recipient_address: str
 
 
+class ClaimPoolFundRequest(BaseModel):
+    amount: float
+
+
 @router.get("/claims")
 async def list_claims(
     status: Optional[str] = Query(None),
@@ -308,4 +312,29 @@ async def authorize_payout(
         "amount": body.amount,
         "recipient": body.recipient_address,
         "approval_tx": tx.get("tx_hash"),
+    }
+
+
+@router.post("/claim-pool/fund")
+async def fund_claim_pool(
+    body: ClaimPoolFundRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Funding amount must be positive")
+    await _get_primary_org_id(db, str(current_user.id))
+    signer_key = await get_user_private_key(str(current_user.id), db)
+    tx = await genlayer_client.send_and_wait(
+        "fund_claim_pool",
+        [],
+        signer_private_key=signer_key,
+        value=int(body.amount * 10**18),
+    )
+    if tx.get("tx_hash"):
+        await poll_until_finalized(tx["tx_hash"], "fund_claim_pool")
+    return {
+        "amount": body.amount,
+        "tx_hash": tx.get("tx_hash"),
+        "status": tx.get("status", "pending"),
     }

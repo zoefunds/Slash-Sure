@@ -127,6 +127,10 @@ class OperatorResponse(BaseModel):
     description: Optional[str]
 
 
+class OperatorStakeUpdate(BaseModel):
+    new_stake: float
+
+
 @router.get("/")
 async def list_operators(
     network: Optional[str] = Query(None),
@@ -296,4 +300,54 @@ async def get_operator(
         "website": operator.website,
         "on_chain_reputation": reputation,
         "created_at": operator.created_at,
+    }
+
+
+@router.post("/{operator_id}/stake")
+async def update_operator_stake(
+    operator_id: str,
+    body: OperatorStakeUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = await _get_primary_org_id(db, str(current_user.id))
+    result = await db.execute(
+        select(Operator).where(
+            Operator.id == uuid.UUID(operator_id),
+            Operator.organization_id == org_id,
+        )
+    )
+    operator = result.scalar_one_or_none()
+    if not operator:
+        raise HTTPException(status_code=404, detail="Operator not found")
+    if _operator_contract_address(operator) != _current_contract_address():
+        raise HTTPException(status_code=404, detail="Operator not found")
+
+    signer_key = await get_user_private_key(str(current_user.id), db)
+    stake_wei = _gen_to_wei(body.new_stake)
+    tx = await genlayer_client.update_operator_stake(
+        address=operator.address,
+        new_stake=stake_wei,
+        signer_private_key=signer_key,
+    )
+    tx_hash = tx.get("tx_hash")
+    if tx_hash:
+        await poll_until_finalized(tx_hash, "update_operator_stake")
+
+    operator.total_stake = body.new_stake
+    operator.extra_metadata = {
+        **(operator.extra_metadata or {}),
+        "contract_address": settings.GENLAYER_CONTRACT_ADDRESS,
+        "last_stake_update_tx": tx_hash,
+    }
+    await db.commit()
+    await db.refresh(operator)
+
+    return {
+        "id": str(operator.id),
+        "address": operator.address,
+        "total_stake_gen": operator.total_stake,
+        "total_stake_wei": stake_wei,
+        "tx_hash": tx_hash,
+        "status": tx.get("status", "pending"),
     }

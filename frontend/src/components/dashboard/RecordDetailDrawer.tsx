@@ -13,6 +13,7 @@ type RecordDetailDrawerProps = {
   sections: Section[];
   raw?: Record<string, unknown> | null;
   isLoading?: boolean;
+  actions?: ReactNode;
   onClose: () => void;
 };
 
@@ -46,6 +47,7 @@ export function RecordDetailDrawer({
   sections,
   raw,
   isLoading,
+  actions,
   onClose,
 }: RecordDetailDrawerProps) {
   if (!open) return null;
@@ -65,6 +67,7 @@ export function RecordDetailDrawer({
         </div>
 
         <div className="p-6 space-y-6">
+          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
           <div className="grid gap-4 md:grid-cols-2">
             {isLoading && sections.length === 0 ? (
               <div className="md:col-span-2 rounded-xl border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
