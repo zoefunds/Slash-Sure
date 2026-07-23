@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { incidentsApi, operatorsApi } from "@/lib/api";
 import { cn, formatDateTime, severityColor, statusColor } from "@/lib/utils";
-import { AlertTriangle, Plus, X, Loader2 } from "lucide-react";
+import { AlertTriangle, Plus, X, Loader2, ArrowRight } from "lucide-react";
+import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 const NETWORKS = ["eigenlayer", "symbiotic", "babylon", "cosmos"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
@@ -231,11 +232,23 @@ function ReportIncidentModal({ onClose }: { onClose: () => void }) {
 
 export default function IncidentsPage() {
   const [showModal, setShowModal] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [selectedIncidentRow, setSelectedIncidentRow] = useState<{
+    id: string; title: string; network: string; severity: string;
+    status: string; ai_fault_probability?: number; detected_at: string;
+    operator_address?: string; description?: string; evidence_url?: string; evidence_title?: string; created_at?: string;
+  } | null>(null);
 
   const { data } = useQuery({
     queryKey: ["incidents"],
     queryFn: () => incidentsApi.list().then((r) => r.data),
     refetchInterval: 10_000,
+  });
+
+  const { data: selectedIncident } = useQuery({
+    queryKey: ["incident-detail", selectedIncidentId],
+    queryFn: () => incidentsApi.get(selectedIncidentId as string).then((r) => r.data),
+    enabled: !!selectedIncidentId,
   });
 
   return (
@@ -265,7 +278,7 @@ export default function IncidentsPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Title", "Network", "Severity", "Status", "AI Score", "Detected"].map(h => (
+                {["Title", "Network", "Severity", "Status", "AI Score", "Detected", "Details"].map(h => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -275,7 +288,7 @@ export default function IncidentsPage() {
                 id: string; title: string; network: string; severity: string;
                 status: string; ai_fault_probability?: number; detected_at: string;
               }) => (
-                <tr key={i.id} className="hover:bg-secondary/50 transition-colors cursor-pointer">
+                <tr key={i.id} className="hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => { setSelectedIncidentId(i.id); setSelectedIncidentRow(i); }}>
                   <td className="px-5 py-3.5 font-medium">{i.title}</td>
                   <td className="px-5 py-3.5 text-muted-foreground capitalize">{i.network}</td>
                   <td className="px-5 py-3.5">
@@ -290,6 +303,15 @@ export default function IncidentsPage() {
                       : <span className="text-muted-foreground text-xs">Pending</span>}
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">{formatDateTime(i.detected_at)}</td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedIncidentId(i.id); setSelectedIncidentRow(i); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -304,6 +326,30 @@ export default function IncidentsPage() {
           )}
         </div>
       </div>
+
+      <RecordDetailDrawer
+        open={!!selectedIncidentId}
+        onClose={() => setSelectedIncidentId(null)}
+        title={selectedIncident?.title || selectedIncidentRow?.title || "Incident details"}
+        subtitle={(selectedIncident?.network || selectedIncidentRow?.network)
+          ? `${selectedIncident?.network || selectedIncidentRow?.network} • ${selectedIncident?.status || selectedIncidentRow?.status || "unknown status"}`
+          : undefined}
+        isLoading={selectedIncidentId !== null && !selectedIncident && !!selectedIncidentRow}
+        sections={[
+          { label: "Title", value: selectedIncident?.title ?? selectedIncidentRow?.title },
+          { label: "Network", value: selectedIncident?.network ?? selectedIncidentRow?.network },
+          { label: "Severity", value: selectedIncident?.severity ?? selectedIncidentRow?.severity },
+          { label: "Status", value: selectedIncident?.status ?? selectedIncidentRow?.status },
+          { label: "Operator", value: selectedIncident?.operator_address ?? selectedIncidentRow?.operator_address },
+          { label: "AI fault probability", value: selectedIncident?.ai_fault_probability != null ? `${selectedIncident.ai_fault_probability}%` : selectedIncidentRow?.ai_fault_probability != null ? `${selectedIncidentRow.ai_fault_probability}%` : "—" },
+          { label: "Detected", value: selectedIncident?.detected_at ?? selectedIncidentRow?.detected_at },
+          { label: "Reported", value: selectedIncident?.created_at ?? selectedIncidentRow?.created_at },
+          { label: "Description", value: selectedIncident?.description ?? selectedIncidentRow?.description },
+          { label: "Evidence URL", value: selectedIncident?.evidence_url ?? selectedIncidentRow?.evidence_url },
+          { label: "Evidence title", value: selectedIncident?.evidence_title ?? selectedIncidentRow?.evidence_title },
+        ]}
+        raw={(selectedIncident ?? selectedIncidentRow) as Record<string, unknown> | null}
+      />
     </div>
   );
 }

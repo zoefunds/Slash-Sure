@@ -5,6 +5,8 @@ from genlayer import *
 
 import json
 import hashlib
+import re
+from html import unescape
 
 
 @gl.evm.contract_interface
@@ -220,6 +222,49 @@ class SlashSureContract(gl.Contract):
         if not url:
             return ""
 
+        def _strip_html(html: str) -> str:
+            text = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
+            text = re.sub(r"(?is)<style.*?>.*?</style>", " ", text)
+            title = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
+            description = re.search(
+                r'(?is)<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
+                html,
+            )
+            og_description = re.search(
+                r'(?is)<meta[^>]+property=["\']og:description["\'][^>]+content=["\'](.*?)["\']',
+                html,
+            )
+            head_bits = []
+            if title:
+                head_bits.append(unescape(title.group(1)))
+            if description:
+                head_bits.append(unescape(description.group(1)))
+            if og_description:
+                head_bits.append(unescape(og_description.group(1)))
+            text = re.sub(r"(?is)<[^>]+>", " ", text)
+            text = unescape(text)
+            text = re.sub(r"\s+", " ", text).strip()
+            if head_bits:
+                text = " ".join(head_bits + ([text] if text else []))
+            return text
+
+        def _summarize(text: str, limit: int = 1200) -> str:
+            if not text:
+                return ""
+            chunks = re.split(r"(?<=[.!?])\s+", text)
+            summary = ""
+            for chunk in chunks:
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                candidate = f"{summary} {chunk}".strip()
+                if len(candidate) > limit:
+                    break
+                summary = candidate
+            if not summary:
+                summary = text[:limit]
+            return summary[:limit]
+
         def fetch() -> str:
             response = gl.nondet.web.get(url)
             status = getattr(response, "status_code", getattr(response, "status", 200))
@@ -227,7 +272,11 @@ class SlashSureContract(gl.Contract):
                 raise gl.vm.UserError("Evidence source returned client error")
             if status >= 500:
                 raise gl.vm.UserError("Evidence source temporarily unavailable")
-            return response.body.decode("utf-8")[:2000]
+            body = response.body.decode("utf-8")[:2000]
+            summary = _summarize(_strip_html(body))
+            if not summary or "<link " in summary or "<html" in summary.lower() or "</" in summary:
+                summary = _summarize(re.sub(r"\s+", " ", re.sub(r"(?is)<[^>]+>", " ", body)).strip())
+            return summary
 
         return gl.eq_principle.strict_eq(fetch)
 
@@ -408,7 +457,7 @@ class SlashSureContract(gl.Contract):
         assert len(evidence_url) > 0, "evidence_url required"
 
         fetched = self._fetch_text(evidence_url)
-        summary_hash = self._hash({"url": evidence_url, "content": fetched})
+        summary_hash = self._hash({"url": evidence_url, "summary": fetched})
         pkg = {
             "incident_id": incident_id,
             "operator_address": operator_address,
@@ -420,6 +469,7 @@ class SlashSureContract(gl.Contract):
             "evidence_summary_hash": summary_hash,
             "evidence_url": evidence_url,
             "web_evidence_preview": fetched[:500],
+            "web_evidence_summary": fetched,
             "submitted_by": gl.message.sender_address.as_hex,
             "timestamp": 0,
         }

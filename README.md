@@ -7,7 +7,7 @@ Powered by [GenLayer](https://genlayer.com) Intelligent Contracts on StudioNet.
 - **Live App:** https://slash-sure.vercel.app
 - **API:** https://slashsure-backend-prod.fly.dev
 - **API Docs:** https://slashsure-backend-prod.fly.dev/api/docs
-- **Intelligent Contract:** `0x444250D147c58a19f4e8CA43527e37F327441eF8` on GenLayer StudioNet
+- **Intelligent Contract:** `0x8565ecca2743945e4020aEB8D6F4a69f088329c8` on GenLayer StudioNet
 
 ---
 
@@ -70,7 +70,7 @@ A superadmin-only dashboard gives full system visibility: all users, operators, 
 ┌────────────────▼────────────────────────┐
 │   GenLayer StudioNet                    │
 │   Intelligent Contract                  │
-│   0x444250D147c58a19f4e8CA43527e37F327441eF8 │
+│   0x8565ecca2743945e4020aEB8D6F4a69f088329c8 │
 │   - register_operator                   │
 │   - analyze_incident (AI)               │
 │   - execute_slash                       │
@@ -201,3 +201,149 @@ The backend is configured with `auto_stop_machines = "off"` and `min_machines_ru
 | `BREVO_API_KEY` | Brevo API key for transactional email |
 | `FRONTEND_URL` | Frontend URL for email links |
 | `ALLOWED_ORIGINS` | CORS allowed origins |
+
+---
+
+## Test Data
+
+Use these values for end-to-end testing:
+
+### Operator registration
+
+| Field | Value |
+|---|---|
+| Operator name | `Chorus One` |
+| Wallet address | `0xF8809b368bCBa4E3eD2a4AddEe93A191F9Ab70e9` |
+| Network | `eigenlayer` |
+| Total stake (GEN) | `1000` |
+| Commission (%) | `5` |
+| Description | `Chorus One is a staking and infrastructure operator focused on uptime, monitoring, and validator reliability.` |
+| Website | `https://chorus.one/` |
+
+### Incident report
+
+| Field | Value |
+|---|---|
+| Title | `Validator downtime detected on EigenLayer` |
+| Incident type | `downtime` |
+| Network | `eigenlayer` |
+| Severity | `medium` |
+| Operator | `0xF8809b368bCBa4E3eD2a4AddEe93A191F9Ab70e9` |
+| Description | `The operator missed participation for a short period during normal network operation.` |
+| Evidence title | `Monitoring dashboard snapshot` |
+| Evidence URL | `https://blog.base.dev/postmortem-june-25th-block-production-outage` |
+| Evidence block number | `4288927` |
+
+### Insurance claim
+
+| Field | Value |
+|---|---|
+| Incident | select the incident created above |
+| Claimant wallet address | `0x97E12226f47FFEB552FAb16882f475c620bF8554` |
+| Coverage amount | `10000` |
+| Claimed amount | `7500` |
+| Policy ID | `POL-EIGEN-2026-001` |
+
+---
+
+## Frontend Errors and What They Mean
+
+### `POST /api/v1/operators/ 400 (Bad Request)`
+The backend rejected the operator registration payload.
+
+Common causes:
+- missing required form values
+- invalid website URL
+- website content does not mention the operator name/address
+- stake is zero or negative
+- GEN amount is lower than the amount required for on-chain registration
+
+How to fix:
+- fill every required field
+- use a reachable HTTPS website
+- make sure the site contains the operator name or address in visible text or metadata
+- enter a positive stake amount in GEN
+
+### `POST /api/v1/operators/ 401 (Unauthorized)`
+The user is not authenticated or the token expired.
+
+How to fix:
+- log in again
+- refresh the browser
+- make sure the frontend is pointed at the correct backend URL
+
+### `GET /api/v1/auth/me 401 (Unauthorized)`
+The session token is missing or stale.
+
+How to fix:
+- re-authenticate
+- clear local storage if the app is stuck on an old session
+
+### `GET /api/v1/auth/me/balance 401 (Unauthorized)`
+The wallet balance endpoint is blocked by the same auth problem as above.
+
+How to fix:
+- log in again
+- confirm the access token is valid
+
+### `ERR_NAME_NOT_RESOLVED`
+The frontend is trying to call a backend hostname that does not exist.
+
+How to fix:
+- update `NEXT_PUBLIC_API_URL`
+- redeploy the frontend after changing environment variables
+- confirm the backend hostname is the current Fly app URL
+
+### `Unable to reach operator website`
+The backend/contract tried to fetch the operator website, but the URL could not be resolved or connected to.
+
+How to fix:
+- use a real public website URL
+- avoid placeholder domains or local-only hosts
+- ensure the website is reachable from the public internet
+
+### `Website verification failed: site must reference the operator name, address, or matching metadata`
+The website was reachable, but it did not contain enough evidence that it belongs to the operator.
+
+How to fix:
+- add the operator name or wallet address to the page
+- add matching metadata like description or author
+- make sure the visible text is not just a generic landing page
+
+### `Evidence source returned client error`
+The contract fetched the evidence URL and received a 4xx response.
+
+How to fix:
+- use a valid evidence URL that returns HTTP 200
+- make sure the URL is public and does not require login
+
+### `This page couldn’t load` on settings
+The frontend could not load data for the page, usually because the backend request failed or the session expired.
+
+How to fix:
+- refresh login
+- verify the backend is running
+- check browser console for the exact API request that failed
+
+### Detail drawer shows dashes only
+The record detail panel opened before the full backend response arrived, or the backend record is missing fields.
+
+How to fix:
+- wait a moment for the detail request to finish
+- confirm the backend route returns the expected record fields
+- use the latest frontend build
+
+---
+
+## Recommended Test Flow
+
+1. Register the operator using the test data above.
+2. Wait for the on-chain transaction to finalize.
+3. Open the operator details drawer and confirm the metadata appears.
+4. Report the incident using the operator above.
+5. Wait for the incident transaction to finalize.
+6. Submit the insurance claim tied to that incident.
+7. Wait for the claim transaction to finalize.
+8. Check the dashboard, incidents, insurance, and admin pages for populated details.
+
+If any transaction fails, inspect the API response first, then the browser console, then the contract result on the explorer.

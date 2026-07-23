@@ -2,13 +2,16 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { authApi, operatorsApi, incidentsApi, adminApi } from "@/lib/api";
-import { Shield, Users, AlertTriangle, BarChart3, UserCheck } from "lucide-react";
+import { Shield, Users, AlertTriangle, BarChart3, UserCheck, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 export default function AdminPage() {
   const router = useRouter();
+  const [selectedRecord, setSelectedRecord] = useState<{ title: string; type: string; raw: Record<string, unknown> } | null>(null);
+  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
 
   // Fetch current user to get fresh is_superadmin flag
   const { data: me } = useQuery({
@@ -90,7 +93,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Name", "Email", "Verified", "Superadmin", "Joined", "Last Login"].map((h) => (
+                {["Name", "Email", "Verified", "Superadmin", "Joined", "Last Login", "Details"].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -101,7 +104,7 @@ export default function AdminPage() {
                 is_verified: boolean; is_superadmin: boolean;
                 created_at: string; last_login_at?: string;
               }) => (
-                <tr key={u.id} className="hover:bg-secondary/50 transition-colors">
+                <tr key={u.id} className="hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => { setSelectedRecord({ title: u.full_name || u.email, type: "user", raw: u as Record<string, unknown> }); setSelectedRow(u as Record<string, unknown>); }}>
                   <td className="px-5 py-3.5 font-medium">{u.full_name || "—"}</td>
                   <td className="px-5 py-3.5 text-muted-foreground">{u.email}</td>
                   <td className="px-5 py-3.5">
@@ -116,11 +119,20 @@ export default function AdminPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "—"}</td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedRecord({ title: u.full_name || u.email, type: "user", raw: u as Record<string, unknown> }); setSelectedRow(u as Record<string, unknown>); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {userList.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground text-sm">No users found</td>
+                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground text-sm">No users found</td>
                 </tr>
               )}
             </tbody>
@@ -139,7 +151,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Address", "Network", "Status", "Stake", "Uptime", "Slash Count"].map((h) => (
+                {["Address", "Network", "Status", "Stake", "Uptime", "Slash Count", "Details"].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -149,7 +161,7 @@ export default function AdminPage() {
                 id: string; address: string; network: string; status: string;
                 total_stake: number; uptime_percentage: number; slash_count: number;
               }) => (
-                <tr key={op.id} className="hover:bg-secondary/50 transition-colors">
+                <tr key={op.id} className="hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => { setSelectedRecord({ title: op.address, type: "operator", raw: op as Record<string, unknown> }); setSelectedRow(op as Record<string, unknown>); }}>
                   <td className="px-5 py-3.5 font-mono text-xs">{op.address.slice(0, 10)}…{op.address.slice(-6)}</td>
                   <td className="px-5 py-3.5 capitalize text-muted-foreground">{op.network}</td>
                   <td className="px-5 py-3.5">
@@ -158,11 +170,20 @@ export default function AdminPage() {
                   <td className="px-5 py-3.5 tabular-nums">{op.total_stake.toLocaleString()} GEN</td>
                   <td className="px-5 py-3.5 tabular-nums">{op.uptime_percentage}%</td>
                   <td className="px-5 py-3.5 tabular-nums">{op.slash_count}</td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedRecord({ title: op.address, type: "operator", raw: op as Record<string, unknown> }); setSelectedRow(op as Record<string, unknown>); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {operatorList.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground text-sm">No operators registered</td>
+                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground text-sm">No operators registered</td>
                 </tr>
               )}
             </tbody>
@@ -181,7 +202,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Title", "Network", "Severity", "Status", "AI Score", "Detected"].map((h) => (
+                {["Title", "Network", "Severity", "Status", "AI Score", "Detected", "Details"].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -191,7 +212,7 @@ export default function AdminPage() {
                 id: string; title: string; network: string; severity: string;
                 status: string; ai_fault_probability?: number; detected_at: string;
               }) => (
-                <tr key={i.id} className="hover:bg-secondary/50 transition-colors">
+                <tr key={i.id} className="hover:bg-secondary/50 transition-colors cursor-pointer" onClick={() => { setSelectedRecord({ title: i.title, type: "incident", raw: i as Record<string, unknown> }); setSelectedRow(i as Record<string, unknown>); }}>
                   <td className="px-5 py-3.5 font-medium">{i.title}</td>
                   <td className="px-5 py-3.5 text-muted-foreground capitalize">{i.network}</td>
                   <td className="px-5 py-3.5">
@@ -206,17 +227,39 @@ export default function AdminPage() {
                   </td>
                   <td className="px-5 py-3.5 tabular-nums">{i.ai_fault_probability != null ? `${i.ai_fault_probability}%` : "—"}</td>
                   <td className="px-5 py-3.5 text-muted-foreground text-xs">{new Date(i.detected_at).toLocaleString()}</td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedRecord({ title: i.title, type: "incident", raw: i as Record<string, unknown> }); setSelectedRow(i as Record<string, unknown>); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {incidentList.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground text-sm">No incidents recorded</td>
+                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground text-sm">No incidents recorded</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      <RecordDetailDrawer
+        open={!!selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+        title={selectedRecord?.title || "Details"}
+        subtitle={selectedRecord?.type ? `${selectedRecord.type} record` : undefined}
+        isLoading={selectedRecord !== null && selectedRow === null}
+        sections={selectedRecord ? Object.entries(selectedRecord.raw).slice(0, 12).map(([label, value]) => ({
+          label: label.replaceAll("_", " "),
+          value: value as ReactNode,
+        })) : []}
+        raw={(selectedRecord?.raw ?? selectedRow) as Record<string, unknown> | null}
+      />
     </div>
   );
 }

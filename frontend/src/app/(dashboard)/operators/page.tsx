@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authApi, operatorsApi } from "@/lib/api";
 import { cn, formatNumber, statusColor, truncateAddress } from "@/lib/utils";
-import { Users, Plus, X, Loader2, Wallet } from "lucide-react";
+import { Users, Plus, X, Loader2, Wallet, ArrowRight } from "lucide-react";
+import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 interface OperatorForm {
   name: string;
@@ -177,11 +178,23 @@ export default function OperatorsPage() {
   const [showModal, setShowModal] = useState(false);
   const [network, setNetwork] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedOperatorId, setSelectedOperatorId] = useState<string | null>(null);
+  const [selectedOperatorRow, setSelectedOperatorRow] = useState<{
+    id: string; name: string; address: string; network: string;
+    status: string; total_stake: number; uptime_percentage: number; slash_count: number;
+    commission_rate?: number; description?: string;
+  } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["operators", network, page],
     queryFn: () => operatorsApi.list({ network: network || undefined, page, per_page: 20 }).then((r) => r.data),
     refetchInterval: 10_000,
+  });
+
+  const { data: selectedOperator } = useQuery({
+    queryKey: ["operator-detail", selectedOperatorId],
+    queryFn: () => operatorsApi.get(selectedOperatorId as string).then((r) => r.data),
+    enabled: !!selectedOperatorId,
   });
 
   return (
@@ -229,20 +242,24 @@ export default function OperatorsPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Operator", "Network", "Status", "Stake", "Uptime", "Slashes"].map((h) => (
+                {["Operator", "Network", "Status", "Stake", "Uptime", "Slashes", "Details"].map((h) => (
                   <th key={h} className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading && (
-                <tr><td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">Loading…</td></tr>
+                <tr><td colSpan={7} className="px-6 py-16 text-center text-muted-foreground">Loading…</td></tr>
               )}
               {data?.items?.map((op: {
                 id: string; name: string; address: string; network: string;
                 status: string; total_stake: number; uptime_percentage: number; slash_count: number;
               }) => (
-                <tr key={op.id} className="hover:bg-secondary transition-colors">
+                <tr
+                  key={op.id}
+                  className="hover:bg-secondary transition-colors cursor-pointer"
+                  onClick={() => { setSelectedOperatorId(op.id); setSelectedOperatorRow(op); }}
+                >
                   <td className="px-6 py-4">
                     <div className="font-medium">{op.name}</div>
                     <div className="text-xs text-muted-foreground font-mono">{truncateAddress(op.address)}</div>
@@ -267,6 +284,15 @@ export default function OperatorsPage() {
                     <span className={op.slash_count > 0 ? "text-red-700 font-medium" : "text-muted-foreground"}>
                       {op.slash_count}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedOperatorId(op.id); setSelectedOperatorRow(op); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -306,6 +332,29 @@ export default function OperatorsPage() {
           </div>
         )}
       </div>
+
+      <RecordDetailDrawer
+        open={!!selectedOperatorId}
+        onClose={() => setSelectedOperatorId(null)}
+        title={selectedOperator?.name || selectedOperatorRow?.name || "Operator details"}
+        subtitle={selectedOperator?.address ? truncateAddress(selectedOperator.address, 8) : selectedOperatorRow?.address ? truncateAddress(selectedOperatorRow.address, 8) : undefined}
+        isLoading={selectedOperatorId !== null && !selectedOperator && !!selectedOperatorRow}
+        sections={[
+          { label: "Name", value: selectedOperator?.name ?? selectedOperatorRow?.name },
+          { label: "Address", value: selectedOperator?.address ?? selectedOperatorRow?.address },
+          { label: "Network", value: selectedOperator?.network ?? selectedOperatorRow?.network },
+          { label: "Status", value: selectedOperator?.status ?? selectedOperatorRow?.status },
+          { label: "Stake", value: selectedOperator?.total_stake != null ? `${formatNumber(selectedOperator.total_stake)} GEN` : selectedOperatorRow?.total_stake != null ? `${formatNumber(selectedOperatorRow.total_stake)} GEN` : "—" },
+          { label: "Commission", value: selectedOperator?.commission_rate != null ? `${selectedOperator.commission_rate}%` : selectedOperatorRow?.commission_rate != null ? `${selectedOperatorRow.commission_rate}%` : "—" },
+          { label: "Uptime", value: selectedOperator?.uptime_percentage != null ? `${Number(selectedOperator.uptime_percentage).toFixed(2)}%` : selectedOperatorRow?.uptime_percentage != null ? `${Number(selectedOperatorRow.uptime_percentage).toFixed(2)}%` : "—" },
+          { label: "Slash count", value: selectedOperator?.slash_count ?? selectedOperatorRow?.slash_count ?? "—" },
+          { label: "Website", value: selectedOperator?.website },
+          { label: "Description", value: selectedOperator?.description ?? selectedOperatorRow?.description },
+          { label: "Registered", value: selectedOperator?.created_at },
+          { label: "Updated", value: selectedOperator?.updated_at },
+        ]}
+        raw={(selectedOperator ?? selectedOperatorRow) as Record<string, unknown> | null}
+      />
     </div>
   );
 }

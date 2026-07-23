@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Minus, ArrowRight, Shield,
 } from "lucide-react";
 import Link from "next/link";
-import { monitoringApi, genlayerApi, incidentsApi } from "@/lib/api";
+import { monitoringApi, genlayerApi, incidentsApi, CONTRACT_ADDRESS } from "@/lib/api";
 import { cn, formatNumber, formatDateTime, severityColor } from "@/lib/utils";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -233,12 +233,12 @@ export default function DashboardPage() {
             {contractError ? "StudioNet Unreachable" : "StudioNet Live"}
           </span>
           <a
-            href={`https://explorer-studio.genlayer.com/contracts/${process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}`}
+            href={`https://explorer-studio.genlayer.com/contracts/${CONTRACT_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors font-mono truncate max-w-[220px]"
           >
-            {process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS}
+            {CONTRACT_ADDRESS}
           </a>
         </div>
         {contractError ? (

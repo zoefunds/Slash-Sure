@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { insuranceApi, incidentsApi } from "@/lib/api";
 import { cn, formatDateTime, formatNumber, statusColor } from "@/lib/utils";
-import { FileText, Plus, X, Loader2, CheckCircle } from "lucide-react";
+import { FileText, Plus, X, Loader2, CheckCircle, ArrowRight } from "lucide-react";
+import { RecordDetailDrawer } from "@/components/dashboard/RecordDetailDrawer";
 
 interface ClaimForm {
   incident_id: string;
@@ -186,11 +187,24 @@ export default function InsurancePage() {
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [selectedClaimRow, setSelectedClaimRow] = useState<{
+    id: string; claim_number: string; status: string;
+    coverage_amount: number; claimed_amount: number; approved_amount?: number;
+    ai_coverage_eligible?: boolean; ai_confidence_score?: number; submitted_at: string;
+    incident_id?: string; claimant_address?: string; policy_id?: string; updated_at?: string; payout_tx_hash?: string;
+  } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["insurance-claims", statusFilter, page],
     queryFn: () => insuranceApi.list({ status: statusFilter || undefined, page, per_page: 20 }).then((r) => r.data),
     refetchInterval: 10_000,
+  });
+
+  const { data: selectedClaim } = useQuery({
+    queryKey: ["insurance-claim-detail", selectedClaimId],
+    queryFn: () => insuranceApi.get(selectedClaimId as string).then((r) => r.data),
+    enabled: !!selectedClaimId,
   });
 
   const STATUSES = ["submitted", "ai_adjudication", "approved", "partial", "rejected", "paid"];
@@ -240,7 +254,7 @@ export default function InsurancePage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary">
               <tr>
-                {["Claim #", "Status", "Coverage", "Claimed", "Approved", "AI Eligible", "Confidence", "Submitted"].map((h) => (
+                {["Claim #", "Status", "Coverage", "Claimed", "Approved", "AI Eligible", "Confidence", "Submitted", "Details"].map((h) => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">
                     {h}
                   </th>
@@ -249,14 +263,14 @@ export default function InsurancePage() {
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading && (
-                <tr><td colSpan={8} className="px-6 py-16 text-center text-muted-foreground">Loading…</td></tr>
+                <tr><td colSpan={9} className="px-6 py-16 text-center text-muted-foreground">Loading…</td></tr>
               )}
               {data?.items?.map((c: {
                 id: string; claim_number: string; status: string;
                 coverage_amount: number; claimed_amount: number; approved_amount?: number;
                 ai_coverage_eligible?: boolean; ai_confidence_score?: number; submitted_at: string;
               }) => (
-                <tr key={c.id} className="hover:bg-secondary transition-colors">
+                <tr key={c.id} className="hover:bg-secondary transition-colors cursor-pointer" onClick={() => { setSelectedClaimId(c.id); setSelectedClaimRow(c); }}>
                   <td className="px-4 py-4 font-mono text-purple-400">{c.claim_number}</td>
                   <td className="px-4 py-4">
                     <span className={cn("px-2 py-1 rounded text-xs font-medium", statusColor(c.status))}>
@@ -282,6 +296,15 @@ export default function InsurancePage() {
                   </td>
                   <td className="px-4 py-4 text-xs text-muted-foreground whitespace-nowrap">
                     {formatDateTime(c.submitted_at)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setSelectedClaimId(c.id); setSelectedClaimRow(c); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Details <ArrowRight className="w-3 h-3" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -315,6 +338,30 @@ export default function InsurancePage() {
           </div>
         )}
       </div>
+
+      <RecordDetailDrawer
+        open={!!selectedClaimId}
+        onClose={() => setSelectedClaimId(null)}
+        title={selectedClaim?.claim_number || selectedClaimRow?.claim_number || "Claim details"}
+        subtitle={(selectedClaim?.status || selectedClaimRow?.status) ? `${selectedClaim?.status || selectedClaimRow?.status} claim` : undefined}
+        isLoading={selectedClaimId !== null && !selectedClaim && !!selectedClaimRow}
+        sections={[
+          { label: "Claim number", value: selectedClaim?.claim_number ?? selectedClaimRow?.claim_number },
+          { label: "Status", value: selectedClaim?.status ?? selectedClaimRow?.status },
+          { label: "Incident", value: selectedClaim?.incident_id ?? selectedClaimRow?.incident_id },
+          { label: "Claimant", value: selectedClaim?.claimant_address ?? selectedClaimRow?.claimant_address },
+          { label: "Policy ID", value: selectedClaim?.policy_id ?? selectedClaimRow?.policy_id },
+          { label: "Coverage amount", value: selectedClaim?.coverage_amount != null ? `${formatNumber(selectedClaim.coverage_amount)} GEN` : selectedClaimRow?.coverage_amount != null ? `${formatNumber(selectedClaimRow.coverage_amount)} GEN` : "—" },
+          { label: "Claimed amount", value: selectedClaim?.claimed_amount != null ? `${formatNumber(selectedClaim.claimed_amount)} GEN` : selectedClaimRow?.claimed_amount != null ? `${formatNumber(selectedClaimRow.claimed_amount)} GEN` : "—" },
+          { label: "Approved amount", value: selectedClaim?.approved_amount != null ? `${formatNumber(selectedClaim.approved_amount)} GEN` : selectedClaimRow?.approved_amount != null ? `${formatNumber(selectedClaimRow.approved_amount)} GEN` : "—" },
+          { label: "AI eligible", value: selectedClaim?.ai_coverage_eligible === true ? "Yes" : selectedClaim?.ai_coverage_eligible === false ? "No" : selectedClaimRow?.ai_coverage_eligible === true ? "Yes" : selectedClaimRow?.ai_coverage_eligible === false ? "No" : "Pending" },
+          { label: "Confidence", value: selectedClaim?.ai_confidence_score != null ? `${selectedClaim.ai_confidence_score}%` : selectedClaimRow?.ai_confidence_score != null ? `${selectedClaimRow.ai_confidence_score}%` : "—" },
+          { label: "Submitted", value: selectedClaim?.submitted_at ?? selectedClaimRow?.submitted_at },
+          { label: "Updated", value: selectedClaim?.updated_at ?? selectedClaimRow?.updated_at },
+          { label: "Payout tx", value: selectedClaim?.payout_tx_hash ?? selectedClaimRow?.payout_tx_hash },
+        ]}
+        raw={(selectedClaim ?? selectedClaimRow) as Record<string, unknown> | null}
+      />
     </div>
   );
 }
